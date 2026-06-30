@@ -1,0 +1,72 @@
+default_platform(:ios)
+
+# Configurable via env so this works on any machine (cowork, CI, etc.).
+# The .p8 private key is NEVER committed — set ASC_KEY_PATH or place it at the default.
+KEY_ID    = ENV["ASC_KEY_ID"]    || "DN354DXRVM"
+ISSUER_ID = ENV["ASC_ISSUER_ID"] || "b3fd1580-7cd1-45ae-bd12-42b56b38371d"
+KEY_PATH  = ENV["ASC_KEY_PATH"]  || File.expand_path("~/.appstoreconnect/private_keys/AuthKey_DN354DXRVM.p8")
+APP_ID    = "com.curio.newsreel"
+APP_NAME  = "Curio News Reel"
+
+def connect
+  token = Spaceship::ConnectAPI::Token.create(
+    key_id: KEY_ID, issuer_id: ISSUER_ID, filepath: KEY_PATH
+  )
+  Spaceship::ConnectAPI.token = token
+end
+
+platform :ios do
+  # Create the bundle id + App Store Connect app record via the API key.
+  lane :setup do
+    connect
+
+    # Bundle ID
+    bid = Spaceship::ConnectAPI::BundleId.all.find { |b| b.identifier == APP_ID }
+    if bid.nil?
+      bid = Spaceship::ConnectAPI::BundleId.create(name: "Curio News Reel", identifier: APP_ID, platform: "IOS")
+      UI.success("Created bundle id #{APP_ID}")
+    else
+      UI.success("Bundle id already exists: #{APP_ID}")
+    end
+
+    # App record
+    app = Spaceship::ConnectAPI::App.find(APP_ID)
+    if app.nil?
+      begin
+        app = Spaceship::ConnectAPI::App.create(
+          name: APP_NAME,
+          version_string: "1.0",
+          sku: "curio-newsreel-001",
+          primary_locale: "en-US",
+          bundle_id: APP_ID,
+          platforms: ["IOS"],
+          company_name: "Ninad Kale"
+        )
+        UI.success("Created app record: #{APP_NAME}")
+      rescue => e
+        UI.error("App create failed: #{e.message}")
+      end
+    else
+      UI.success("App record already exists: #{app.name}")
+    end
+  end
+
+  # List recent uploaded builds + their processing state.
+  lane :builds do
+    connect
+    app = Spaceship::ConnectAPI::App.find(APP_ID)
+    if app.nil?
+      UI.error("App record not found for #{APP_ID}")
+    else
+      UI.success("App: #{app.name} (id #{app.id})")
+      builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, sort: "-uploadedDate", limit: 5)
+      if builds.empty?
+        UI.important("No builds visible yet (Apple may still be ingesting — check again shortly).")
+      else
+        builds.each do |b|
+          UI.message("build #{b.app_version}(#{b.version})  state=#{b.processing_state}  uploaded=#{b.uploaded_date}")
+        end
+      end
+    end
+  end
+end

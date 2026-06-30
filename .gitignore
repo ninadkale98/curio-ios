@@ -1,0 +1,33 @@
+# ── Secrets — NEVER commit ──────────────────────────────
+*.p8
+AuthKey_*.p8
+fastlane_key.json
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.keychain
+*.keychain-db
+
+# ── Build artifacts ─────────────────────────────────────
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# ── Xcode user state ────────────────────────────────────
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# ── fastlane output ─────────────────────────────────────
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output
+fastlane/README.md
+
+# ── macOS ───────────────────────────────────────────────
+.DS_Store
