@@ -88,6 +88,8 @@ struct Story: Identifiable, Codable, Hashable {
     let mono: String           // 2-letter badge
     let category: String
     let readTime: String
+    let author: String         // byline name
+    let date: String           // display date, e.g. "Jun 24, 2025"
     let title: String
     let summary: String
     let imageURL: String

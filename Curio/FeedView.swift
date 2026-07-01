@@ -6,50 +6,80 @@ import UIKit
 // chase. Two things had to be true at once and only this gives both:
 //
 //  1. Paging geometry: isPagingEnabled pages by the scroll view's OWN bounds
-//     (the full screen), and contentInsetAdjustmentBehavior = .never on OUR
-//     instance means no safe-area inset can shift the content. (SwiftUI's own
-//     ScrollView and UIPageViewController kept a 59pt inset we couldn't reach.)
-//  2. No cross-page bleed: each page host CLIPS to its bounds. The real bug all
-//     along wasn't the scroll container — StoryCardView's collapsed preview
-//     overflows its frame, and without clipping the NEXT card's cover bled
-//     upward into the current card's bottom (the "¾ + ¼" peek). clipsToBounds
-//     on each host contains every card to exactly its own screen.
+//     (the full screen), and contentInsetAdjustmentBehavior = .never means no
+//     safe-area inset can shift the content.
+//  2. No cross-page bleed: each page host CLIPS to its bounds. The real paging
+//     bug was StoryCardView's collapsed preview overflowing its frame, and
+//     without clipping the NEXT card's cover bled into the current card.
 //
-// Native pan drives scrolling (smooth, no SwiftUI gesture arbitration). Expand
-// flips isScrollEnabled off so the card's inner article ScrollView takes over.
-final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
+// Native pan drives scrolling. Velocity-based snapping + a fixed-duration
+// animation give the crisp TikTok feel. contentKey lets us skip rootView churn
+// when only the (unrelated) detail transition is animating.
+final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     private let scrollView = UIScrollView()
     private var hosts: [UIHostingController<AnyView>] = []
     private var lastSize: CGSize = .zero
+    private var lastKey = ""
     private(set) var currentPage = 0
     var onPageSettled: (Int) -> Void = { _ in }
+    var onOpenPanChanged: (CGFloat) -> Void = { _ in }   // horizontal translation.x (negative = opening)
+    var onOpenPanEnded: (CGFloat, CGFloat) -> Void = { _, _ in }  // translation.x, velocity.x
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
         overrideUserInterfaceStyle = .dark
 
-        // NOTE: isPagingEnabled is intentionally OFF. Apple's built-in paging only
-        // flips once you drag past ~half the screen and ignores flick speed, which
-        // feels heavy. We snap by VELOCITY in scrollViewWillEndDragging instead, so
-        // a short quick flick advances one reel — the TikTok / Reels feel.
-        scrollView.isPagingEnabled = false
-        scrollView.decelerationRate = .fast                  // snappy settle
-        scrollView.contentInsetAdjustmentBehavior = .never   // we own this — never overridden
+        scrollView.isPagingEnabled = false           // we snap by velocity ourselves
+        scrollView.decelerationRate = .fast
+        scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.isDirectionalLockEnabled = true
         scrollView.showsVerticalScrollIndicator = false
         scrollView.showsHorizontalScrollIndicator = false
-        scrollView.delaysContentTouches = false              // card taps/swipes engage instantly
+        scrollView.delaysContentTouches = false
         scrollView.bounces = true
         scrollView.backgroundColor = .clear
         scrollView.delegate = self
         view.addSubview(scrollView)
+
+        // Horizontal swipe-to-open lives here, in UIKit, so it can be gated to
+        // begin ONLY for a leftward-horizontal drag — vertical scrolls then never
+        // contend with it (a SwiftUI gesture on the cards could not do this).
+        let openPan = UIPanGestureRecognizer(target: self, action: #selector(handleOpenPan(_:)))
+        openPan.delegate = self
+        scrollView.addGestureRecognizer(openPan)
     }
 
-    /// Build the hosted pages once; thereafter just refresh their SwiftUI content
-    /// (cheap — SwiftUI diffs the rootView, no rebuild).
-    func setPages(_ pages: [AnyView]) {
+    @objc private func handleOpenPan(_ g: UIPanGestureRecognizer) {
+        let tx = g.translation(in: view).x
+        switch g.state {
+        case .began, .changed:
+            onOpenPanChanged(tx)
+        case .ended, .cancelled, .failed:
+            onOpenPanEnded(tx, g.velocity(in: view).x)
+        default:
+            break
+        }
+    }
+
+    // Only begin for a clearly-horizontal leftward drag → vertical scroll wins
+    // cleanly, no race.
+    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        guard let pan = g as? UIPanGestureRecognizer else { return true }
+        let v = pan.velocity(in: view)
+        return v.x < 0 && abs(v.x) > abs(v.y) * 1.2
+    }
+
+    // Coexist with the scroll view's own pan (and the cards' taps).
+    func gestureRecognizer(_ g: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    func setPages(_ pages: [AnyView], key: String) {
         if hosts.count == pages.count {
+            guard key != lastKey else { return }     // nothing card-relevant changed — skip
+            lastKey = key
             for (h, p) in zip(hosts, pages) { h.rootView = p }
             return
         }
@@ -62,14 +92,15 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
             let h = UIHostingController(rootView: page)
             h.view.backgroundColor = .clear
             h.overrideUserInterfaceStyle = .dark
-            h.safeAreaRegions = []       // full-screen content; insets arrive via environment
-            h.view.clipsToBounds = true  // THE fix: never let a card draw outside its own page
+            h.safeAreaRegions = []
+            h.view.clipsToBounds = true              // never let a card draw outside its own page
             addChild(h)
             scrollView.addSubview(h.view)
             h.didMove(toParent: self)
             return h
         }
-        lastSize = .zero                 // force a fresh layout pass for the new hosts
+        lastKey = key
+        lastSize = .zero
         viewIfLoaded?.setNeedsLayout()
     }
 
@@ -89,22 +120,16 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
         }
         scrollView.contentSize = CGSize(width: size.width,
                                         height: size.height * CGFloat(hosts.count))
-        // Pin the current card across relayout / rotation.
         scrollView.contentOffset = CGPoint(x: 0, y: CGFloat(currentPage) * size.height)
     }
 
-    // MARK: velocity-based paging (the TikTok feel)
-    // Decide the target page from flick speed, not drag distance, then drive the
-    // snap with OUR OWN fixed-duration animation. UIScrollView's built-in
-    // deceleration approaches a forced target asymptotically — that ease-out tail
-    // is the "last part crawls for a second or two" feeling. A definite 0.3s
-    // ease-out lands crisply with no tail.
+    // MARK: velocity-based paging + crisp snap (no slow deceleration tail)
     func scrollViewWillEndDragging(_ sv: UIScrollView,
                                    withVelocity velocity: CGPoint,
                                    targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         let h = view.bounds.height
         guard h > 0 else { return }
-        let flick: CGFloat = 0.2   // points/ms — light, so a short quick swipe counts
+        let flick: CGFloat = 0.2
         var target = currentPage
         if velocity.y > flick {
             target = currentPage + 1
@@ -115,9 +140,7 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
         }
         target = max(0, min(hosts.count - 1, target))
 
-        // Cancel the built-in deceleration (its asymptotic tail is the slow drift)…
         targetContentOffset.pointee = sv.contentOffset
-        // …and snap ourselves with a definite, crisp landing.
         let dest = CGPoint(x: 0, y: CGFloat(target) * h)
         UIView.animate(withDuration: 0.3, delay: 0,
                        options: [.curveEaseOut, .allowUserInteraction]) {
@@ -127,8 +150,6 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
         }
     }
 
-    // MARK: settle → report the landed page
-    // Normal path is the snap animation above; this stays as a harmless fallback.
     func scrollViewDidEndDecelerating(_ sv: UIScrollView) {
         let h = view.bounds.height
         guard h > 0 else { return }
@@ -145,19 +166,26 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate {
 private struct VerticalPager: UIViewControllerRepresentable {
     let pages: [AnyView]
     let scrollEnabled: Bool
+    let contentKey: String
     let onPageSettled: (Int) -> Void
+    let onOpenPanChanged: (CGFloat) -> Void
+    let onOpenPanEnded: (CGFloat, CGFloat) -> Void
 
     func makeUIViewController(context: Context) -> VerticalPagerController {
         let vc = VerticalPagerController()
         vc.onPageSettled = onPageSettled
-        vc.setPages(pages)
+        vc.onOpenPanChanged = onOpenPanChanged
+        vc.onOpenPanEnded = onOpenPanEnded
+        vc.setPages(pages, key: contentKey)
         vc.setScrollEnabled(scrollEnabled)
         return vc
     }
 
     func updateUIViewController(_ vc: VerticalPagerController, context: Context) {
         vc.onPageSettled = onPageSettled
-        vc.setPages(pages)
+        vc.onOpenPanChanged = onOpenPanChanged
+        vc.onOpenPanEnded = onOpenPanEnded
+        vc.setPages(pages, key: contentKey)
         vc.setScrollEnabled(scrollEnabled)
     }
 }
@@ -167,62 +195,145 @@ struct FeedView: View {
     @State private var vm = FeedViewModel()
     @State private var expandedID: String?
     @State private var detailStory: Story?
+    @State private var detailProgress: CGFloat = 0    // 0 = reel, 1 = reader open
+    @State private var currentPage = 0                // which reel card is showing
     private let theme: Palette = .dark
 
+    private let reveal: Animation = .spring(response: 0.36, dampingFraction: 0.86)
+
     var body: some View {
-        let insets = SafeArea.insets()
-        ZStack {
-            theme.pageBg
+        GeometryReader { proxy in
+            let size = proxy.size
+            let insets = SafeArea.insets()
+            let dist = max(size.width * 0.6, 1)        // drag distance that = a full open/close
 
-            switch vm.state {
-            case .idle, .loading:
-                ProgressView().controlSize(.large).tint(theme.accent)
-            case .failed(let m):
-                errorView(m)
-            case .loaded:
-                VerticalPager(
-                    pages: vm.stories.map { story in
-                        AnyView(
-                            StoryCardView(
-                                story: story,
-                                isExpanded: expandedID == story.id,
-                                isLiked: vm.isLiked(story.id),
-                                isSaved: vm.isSaved(story.id),
-                                likeCount: vm.likeCount(for: story),
-                                onExpandToggle: { toggleExpand(story.id) },
-                                onLike: { vm.toggleLike(story.id) },
-                                onSave: { vm.toggleSave(story.id) },
-                                onOpenDetail: { openDetail(story) },
-                                onSwipeRight: {}
-                            )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .environment(\.safeTop, insets.top)
-                            .environment(\.safeBottom, insets.bottom)
-                            .environment(\.theme, theme)
-                            .preferredColorScheme(.dark)
-                            .ignoresSafeArea()
+            ZStack {
+                theme.pageBg
+
+                switch vm.state {
+                case .idle, .loading:
+                    ProgressView().controlSize(.large).tint(theme.accent)
+                case .failed(let m):
+                    errorView(m)
+                case .loaded:
+                    reel(size: size, insets: insets, dist: dist)
+                        // The reel recedes as the reader comes forward.
+                        .scaleEffect(1 - detailProgress * 0.06)
+                        .offset(x: -detailProgress * size.width * 0.22)
+                        .overlay(
+                            Color.black.opacity(detailProgress * 0.5)
+                                .ignoresSafeArea()
+                                .allowsHitTesting(false)
                         )
-                    },
-                    scrollEnabled: expandedID == nil,
-                    onPageSettled: { _ in expandedID = nil }   // revisited card always collapsed
-                )
-                .ignoresSafeArea()
-            }
-
-            if let story = detailStory {
-                DetailView(story: story) {
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
-                        detailStory = nil
-                    }
                 }
-                .transition(.move(edge: .trailing))
-                .zIndex(2)
+
+                if let story = detailStory {
+                    DetailView(
+                        story: story,
+                        onCloseDragChanged: { tx in closeDragChanged(tx, dist) },
+                        onCloseDragEnded:  { tx, pred in closeDragEnded(tx, pred, dist) },
+                        onClose: closeReader
+                    )
+                    .environment(\.safeTop, insets.top)
+                    .environment(\.safeBottom, insets.bottom)
+                    .environment(\.theme, theme)
+                    .preferredColorScheme(.dark)
+                    .frame(width: size.width, height: size.height)
+                    .scaleEffect(0.94 + detailProgress * 0.06)
+                    .offset(x: (1 - detailProgress) * size.width)
+                    .shadow(color: .black.opacity(0.45), radius: 22, x: -10)
+                    .zIndex(2)
+                }
             }
+            .frame(width: size.width, height: size.height)
+            .environment(\.safeTop, insets.top)
+            .environment(\.safeBottom, insets.bottom)
         }
         .ignoresSafeArea()
         .environment(\.theme, theme)
         .preferredColorScheme(.dark)
         .task { await vm.load() }
+    }
+
+    // MARK: Reel
+    private func reel(size: CGSize, insets: EdgeInsets, dist: CGFloat) -> some View {
+        VerticalPager(
+            pages: vm.stories.map { story in
+                AnyView(
+                    StoryCardView(
+                        story: story,
+                        isExpanded: expandedID == story.id,
+                        isLiked: vm.isLiked(story.id),
+                        isSaved: vm.isSaved(story.id),
+                        likeCount: vm.likeCount(for: story),
+                        onExpandToggle: { toggleExpand(story.id) },
+                        onLike: { vm.toggleLike(story.id) },
+                        onSave: { vm.toggleSave(story.id) }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .environment(\.safeTop, insets.top)
+                    .environment(\.safeBottom, insets.bottom)
+                    .environment(\.theme, theme)
+                    .preferredColorScheme(.dark)
+                    .ignoresSafeArea()
+                )
+            },
+            scrollEnabled: expandedID == nil && detailStory == nil,
+            contentKey: contentKey,
+            onPageSettled: { page in currentPage = page; expandedID = nil },
+            onOpenPanChanged: { tx in openPanChanged(tx, dist) },
+            onOpenPanEnded:  { tx, vx in openPanEnded(tx, vx, dist) }
+        )
+        .ignoresSafeArea()
+    }
+
+    // Changes only when a card's own appearance changes — NOT during the detail
+    // transition — so the pager skips rebuilding its hosted cards every frame.
+    private var contentKey: String {
+        let parts = vm.stories.map { s in
+            "\(s.id):\(vm.isLiked(s.id) ? 1 : 0)\(vm.isSaved(s.id) ? 1 : 0):\(vm.likeCount(for: s))"
+        }
+        return (expandedID ?? "-") + "|" + parts.joined(separator: ",")
+    }
+
+    // MARK: Open (swipe-left) — interactive, driven by the pager's UIKit pan
+    private func openPanChanged(_ tx: CGFloat, _ dist: CGFloat) {
+        guard detailProgress < 1 else { return }
+        let story = vm.stories[min(max(currentPage, 0), vm.stories.count - 1)]
+        if detailStory?.id != story.id { detailStory = story }
+        detailProgress = min(1, max(0, -tx / dist))
+    }
+    private func openPanEnded(_ tx: CGFloat, _ vx: CGFloat, _ dist: CGFloat) {
+        guard detailStory != nil, detailProgress < 1 else { return }
+        let p = min(1, max(0, -tx / dist))
+        let flick = vx < -650                           // fast leftward flick (pt/s)
+        if p > 0.3 || flick {
+            Haptics.tap()
+            withAnimation(reveal) { detailProgress = 1 }
+        } else {
+            withAnimation(reveal) { detailProgress = 0 } completion: {
+                if detailProgress == 0 { detailStory = nil }
+            }
+        }
+    }
+
+    // MARK: Close (swipe-right) — interactive
+    private func closeDragChanged(_ tx: CGFloat, _ dist: CGFloat) {
+        guard detailProgress > 0 else { return }
+        detailProgress = min(1, max(0, 1 - tx / dist))
+    }
+    private func closeDragEnded(_ tx: CGFloat, _ predicted: CGFloat, _ dist: CGFloat) {
+        let p = min(1, max(0, 1 - tx / dist))
+        let flick = predicted > dist * 0.5
+        if p < 0.7 || flick {
+            closeReader()
+        } else {
+            withAnimation(reveal) { detailProgress = 1 }
+        }
+    }
+    private func closeReader() {
+        Haptics.tap()
+        withAnimation(reveal) { detailProgress = 0 } completion: { detailStory = nil }
     }
 
     // MARK: States
@@ -249,12 +360,6 @@ struct FeedView: View {
     // MARK: Actions
     private func toggleExpand(_ id: String) {
         expandedID = (expandedID == id) ? nil : id
-    }
-
-    private func openDetail(_ story: Story) {
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.9)) {
-            detailStory = story
-        }
     }
 }
 

@@ -1,42 +1,93 @@
 import SwiftUI
 
+// MARK: - Reading progress preference
+private struct ReaderScrollKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0            // 0…1 reading progress
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 // MARK: - DetailView
-// Simple, typography-first long-form reader. No hero image, no chrome, no AI.
-// Opened from a feed card by swipe-left; swipe-right to dismiss.
+// Premium, reading-first long-form reader. Hero image up top (the swipe-left
+// morph lands on it), then title, byline, rule, body. The horizontal open/close
+// transition is driven by FeedView — this view only REPORTS its right-drag so
+// the dismissal tracks the finger 1:1 and a quick flick bails instantly.
 struct DetailView: View {
     let story: Story
+    let onCloseDragChanged: (CGFloat) -> Void        // live right-drag translation
+    let onCloseDragEnded: (CGFloat, CGFloat) -> Void // final translation, predicted end
     let onClose: () -> Void
 
     @Environment(\.theme) private var theme
     @Environment(\.safeTop) private var safeTop
     @Environment(\.safeBottom) private var safeBottom
-    @State private var dragX: CGFloat = 0
+    @State private var readProgress: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
-            ZStack {
+            ZStack(alignment: .top) {
                 theme.pageBg.ignoresSafeArea()
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
-                        header
-                        DetailArticleView(blocks: story.blocks)
-                            .padding(.top, 30)
+                        hero(geo)
+                        articleColumn(geo)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, safeTop + 28)
-                    .padding(.bottom, safeBottom + 64)
-                    .frame(width: geo.size.width, alignment: .leading)
+                    .background(
+                        GeometryReader { g in
+                            let minY = g.frame(in: .named("readerScroll")).minY
+                            let scrollable = max(g.size.height - geo.size.height, 1)
+                            Color.clear.preference(key: ReaderScrollKey.self,
+                                                   value: min(1, max(0, -minY / scrollable)))
+                        }
+                    )
                 }
+                .coordinateSpace(name: "readerScroll")
+                .ignoresSafeArea(edges: .top)
+                .onPreferenceChange(ReaderScrollKey.self) { readProgress = $0 }
+
+                // Thin reading-progress bar pinned to the very top.
+                Rectangle()
+                    .fill(theme.accent)
+                    .frame(width: max(0, geo.size.width * readProgress), height: 2.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
+
+                // Always-available way back (in addition to swipe-right).
+                backButton
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 16)
+                    .padding(.top, safeTop + 4)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
             .background(theme.pageBg)
-            .offset(x: max(dragX, 0))
-            .simultaneousGesture(dismissSwipe)
+            .contentShape(Rectangle())
+            .simultaneousGesture(closeDrag)
         }
     }
 
-    // MARK: Header — eyebrow, title, byline, rule
-    private var header: some View {
+    // MARK: Hero
+    private func hero(_ geo: GeometryProxy) -> some View {
+        let h = geo.size.height * 0.4
+        return CachedAsyncImage(url: story.imageURL, hue: story.hue)
+            .frame(width: geo.size.width, height: h)
+            .clipped()
+            // Fade the image bottom into the page so text begins seamlessly.
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [theme.pageBg.opacity(0), theme.pageBg],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: h * 0.55)
+            }
+            // Legibility scrim behind the back button.
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.4), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: safeTop + 56)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    // MARK: Article column
+    private func articleColumn(_ geo: GeometryProxy) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(story.category)
                 .font(CurioFont.mono(11, weight: .semibold))
@@ -44,43 +95,85 @@ struct DetailView: View {
                 .foregroundColor(theme.accent)
 
             Text(story.title)
-                .font(CurioFont.display(32, weight: .heavy))
+                .font(CurioFont.display(30, weight: .heavy))
                 .foregroundColor(theme.text)
                 .tracking(-0.5)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 14)
+                .padding(.top, 12)
 
-            HStack(spacing: 8) {
-                Text(story.source)
-                    .font(CurioFont.body(14, weight: .semibold))
-                    .foregroundColor(theme.text)
-                Circle().fill(theme.faint).frame(width: 3, height: 3)
-                Text(story.readTime + " read")
-                    .font(CurioFont.body(14))
-                    .foregroundColor(theme.faint)
-            }
-            .padding(.top, 18)
+            byline
+                .padding(.top, 18)
 
             Rectangle()
                 .fill(theme.line)
                 .frame(height: 1)
-                .padding(.top, 22)
+                .padding(.top, 20)
+
+            DetailArticleView(blocks: story.blocks)
+                .padding(.top, 26)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 20)
+        .padding(.bottom, safeBottom + 80)
+        .frame(width: geo.size.width, alignment: .leading)
+    }
+
+    // MARK: Byline — avatar chip + author, then source · date · read time
+    private var byline: some View {
+        HStack(spacing: 11) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(theme.elevated)
+                    .frame(width: 36, height: 36)
+                Text(story.mono)
+                    .font(CurioFont.body(12.5, weight: .bold))
+                    .foregroundColor(theme.text)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(story.author)
+                    .font(CurioFont.body(14.5, weight: .semibold))
+                    .foregroundColor(theme.text)
+                HStack(spacing: 7) {
+                    Text(story.source)
+                    dot
+                    Text(story.date)
+                    dot
+                    Text(story.readTime + " read")
+                }
+                .font(CurioFont.body(12.5))
+                .foregroundColor(theme.faint)
+            }
         }
     }
 
-    // Swipe-right dismisses (mirrors the swipe-left that opened it).
-    private var dismissSwipe: some Gesture {
-        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+    private var dot: some View { Circle().fill(theme.faint).frame(width: 3, height: 3) }
+
+    // MARK: Back button
+    private var backButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.16), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Right-drag dismisses — reported to FeedView so it tracks the finger.
+    private var closeDrag: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { v in
-                guard abs(v.translation.width) > abs(v.translation.height), v.translation.width > 0 else { return }
-                dragX = v.translation.width
+                guard abs(v.translation.width) > abs(v.translation.height),
+                      v.translation.width > 0 else { return }
+                onCloseDragChanged(v.translation.width)
             }
             .onEnded { v in
-                if abs(v.translation.width) > abs(v.translation.height), v.translation.width > 90 {
-                    onClose()
-                }
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragX = 0 }
+                guard abs(v.translation.width) > abs(v.translation.height),
+                      v.translation.width > 0 else { onCloseDragEnded(0, 0); return }
+                onCloseDragEnded(v.translation.width, v.predictedEndTranslation.width)
             }
     }
 }
@@ -91,7 +184,7 @@ struct DetailArticleView: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: 28) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
@@ -120,7 +213,7 @@ struct DetailArticleView: View {
         case .paragraph(let text):
             Text(MarkdownCache.attributed(text))
                 .font(CurioFont.body(17.5))
-                .foregroundColor(theme.text.opacity(0.86))
+                .foregroundColor(theme.text.opacity(0.92))
                 .lineSpacing(9)
                 .tint(theme.text)
                 .fixedSize(horizontal: false, vertical: true)
@@ -271,7 +364,10 @@ private struct DetailDiagram: View {
 }
 
 #Preview {
-    DetailView(story: sampleStories[2], onClose: {})
+    DetailView(story: sampleStories[2],
+               onCloseDragChanged: { _ in },
+               onCloseDragEnded: { _, _ in },
+               onClose: {})
         .environment(\.theme, .dark)
         .preferredColorScheme(.dark)
 }

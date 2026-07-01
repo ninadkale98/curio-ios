@@ -12,14 +12,14 @@ struct StoryCardView: View {
     let onExpandToggle: () -> Void   // double-tap
     let onLike: () -> Void
     let onSave: () -> Void
-    let onOpenDetail: () -> Void     // swipe-left
-    let onSwipeRight: () -> Void     // reserved for later
+    // Horizontal swipe-to-open is handled by the pager's UIKit pan recognizer
+    // (VerticalPagerController), not here — a SwiftUI gesture on content inside
+    // the scroll view fought the vertical scroll.
 
     @Environment(\.theme) private var theme
     @Environment(\.safeTop) private var safeTop
     @Environment(\.safeBottom) private var safeBottom
     @State private var likeBump: CGFloat = 1
-    @State private var dragX: CGFloat = 0
 
     private var coverHeight: CGFloat { isExpanded ? 0.17 : 0.42 }
 
@@ -34,8 +34,6 @@ struct StoryCardView: View {
             .clipped()   // the collapsed preview overflows by design — keep it inside the card
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { toggleExpand() }
-            .simultaneousGesture(horizontalSwipe)
-            .offset(x: dragX)
             // Pill + fade live on the card's full-screen coordinate space (reliable),
             // not inside the cover/content (which mis-position child overlays).
             .overlay(alignment: .topLeading) {
@@ -234,28 +232,6 @@ struct StoryCardView: View {
         }
     }
 
-    // Horizontal swipe: left → detailed blog, right → reserved.
-    // Gated on horizontal dominance so vertical paging is untouched.
-    private var horizontalSwipe: some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .local)
-            .onChanged { v in
-                guard abs(v.translation.width) > abs(v.translation.height) else { return }
-                let w = v.translation.width
-                dragX = (w < 0 ? -1 : 1) * pow(abs(w), 0.85)   // resistance, both directions
-            }
-            .onEnded { v in
-                let horizontal = abs(v.translation.width) > abs(v.translation.height)
-                if horizontal && v.translation.width < -64 {
-                    Haptics.tap()
-                    onOpenDetail()                   // swipe-left → blog
-                } else if horizontal && v.translation.width > 64 {
-                    Haptics.tap()
-                    onSwipeRight()                   // reserved
-                }
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { dragX = 0 }
-            }
-    }
-
     private func formatCount(_ n: Int) -> String {
         n >= 1000 ? String(format: "%.1fk", Double(n) / 1000.0) : "\(n)"
     }
@@ -268,7 +244,7 @@ struct StoryCardView: View {
         isLiked: false,
         isSaved: false,
         likeCount: 2104,
-        onExpandToggle: {}, onLike: {}, onSave: {}, onOpenDetail: {}, onSwipeRight: {}
+        onExpandToggle: {}, onLike: {}, onSave: {}
     )
     .environment(\.theme, .dark)
     .preferredColorScheme(.dark)
