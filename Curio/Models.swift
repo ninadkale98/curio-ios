@@ -102,6 +102,18 @@ struct Story: Identifiable, Codable, Hashable {
     // Independent of `blocks`. If nil, the reader derives HTML from `blocks`.
     var bodyHTML: String? = nil
 
+    // Explicit snake_case keys so this same type encodes straight into (and
+    // decodes straight out of) the Supabase `stories` table columns — no
+    // reliance on JSONEncoder's convertToSnakeCase acronym guessing for
+    // fields like imageURL/bodyHTML.
+    private enum CodingKeys: String, CodingKey {
+        case id, source, mono, category, author, date, title, summary, likes, hue, blocks, prompts
+        case readTime = "read_time"
+        case imageURL = "image_url"
+        case chatIntro = "chat_intro"
+        case bodyHTML = "body_html"
+    }
+
     static func == (lhs: Story, rhs: Story) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

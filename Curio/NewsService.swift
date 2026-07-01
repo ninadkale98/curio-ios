@@ -14,18 +14,30 @@ struct MockNewsService: NewsService {
     }
 }
 
-// TODO: Real backend — decodes the same Codable `Story` JSON the mock returns.
-//
-// struct APINewsService: NewsService {
-//     let baseURL: URL
-//     let session: URLSession = .shared
-//     func fetchStories() async throws -> [Story] {
-//         let url = baseURL.appending(path: "v1/feed")
-//         let (data, response) = try await session.data(from: url)
-//         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-//         return try JSONDecoder().decode([Story].self, from: data)
-//     }
-// }
+// MARK: - Supabase-backed service
+// Fetches the `stories` table over Supabase's auto-generated REST API (PostgREST).
+// Uses the ANON key only — safe to embed in a client, since it's scoped by the
+// "Public read access" Row Level Security policy (read-only; no insert/update/
+// delete). New blogs are added directly in the Supabase dashboard.
+struct SupabaseNewsService: NewsService {
+    private let baseURL = URL(string: "https://mixkzotcnwvkdvlxhobe.supabase.co/rest/v1/stories")!
+    private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1peGt6b3Rjbnd2a2R2bHhob2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NzI0ODYsImV4cCI6MjA5ODQ0ODQ4Nn0.3ALwtoucsBj976IN02l4bvkHz2Vaog6fVQaPvxHDVOE"
+
+    func fetchStories() async throws -> [Story] {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "order", value: "published_at.desc")]
+
+        var request = URLRequest(url: components.url!)
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode([Story].self, from: data)
+    }
+}
 
 // MARK: - Feed View Model
 @MainActor
@@ -45,7 +57,7 @@ final class FeedViewModel {
 
     private let service: NewsService
 
-    init(service: NewsService = MockNewsService()) {
+    init(service: NewsService = SupabaseNewsService()) {
         self.service = service
     }
 
