@@ -318,69 +318,300 @@ enum ReaderHTML {
 // A fully-authored house-styled article that exercises every element in the
 // toolbox — the reference example the authoring spec points to.
 enum ReaderContent {
-    static let neuroChips = #"""
-    <p class="lead">A single GPT-4-class training run consumes more electricity than 130 American homes use in a year — and the next generation will need four times that. A handful of chipmakers are betting the fix isn't more silicon, but silicon that thinks like a brain.</p>
+    // Rewritten from content/ros-explainer.html into the Curio house format.
+    static let ros = #"""
+    <p class="lead">Despite the name, ROS isn't an operating system. It never was. And once you see what it actually is, you understand why almost every research robot on the planet quietly runs on it.</p>
 
-    <p>For eighty years, nearly every computer ever built has obeyed the same blueprint: memory in one place, compute in another, and a bus shuttling data between them. It is called the <strong>von Neumann architecture</strong>, and for AI workloads it has quietly become the enemy.</p>
+    <p>Say "operating system" and you picture Linux or Windows — the thing that owns the hardware. ROS owns nothing. It sits <em>on top</em> of Linux and pulls a sneakier trick: it lets a swarm of separate programs on one robot behave as if they were a single mind.</p>
 
-    <h2>The von Neumann wall</h2>
-    <p>Every modern accelerator — Nvidia's H100, Google's TPU, Amazon's Trainium — spends most of its energy not on math but on <em>movement</em>: hauling weights from memory to the compute units and back, billions of times a second. Researchers call this the <a href="#">memory wall</a>, and it now dominates the power budget of large models.</p>
+    <p>Picture a robot not as one machine but as a room full of specialists. One program does nothing but read the LIDAR. Another only plans paths. Another just drives the motors. <strong>ROS is the language they gossip in</strong> — and the real magic is that none of them knows who the others are.</p>
 
-    <blockquote>
-      <p>We are not making a faster GPU. We are making a different animal entirely.</p>
-      <cite>Dr. Kwabena Boahen · Stanford Neurogrid Lab</cite>
-    </blockquote>
-
-    <p>Neuromorphic chips attack the wall with three ideas borrowed from biology:</p>
-    <ul>
-      <li><strong>In-memory compute</strong> — the math happens where the weights already live, so data barely moves.</li>
-      <li><strong>Event-driven spikes</strong> — neurons fire only when they have something to say; the rest of the chip sits dark.</li>
-      <li><strong>Massive parallelism</strong> — hundreds of thousands of tiny cores, each doing almost nothing, almost all the time.</li>
-    </ul>
-
-    <figure>
-      <img src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1000&q=80&auto=format&fit=crop" alt="Neuromorphic wafer">
-      <figcaption>A wafer of neuromorphic cores under inspection at a fabrication lab in Hillsboro, Oregon.</figcaption>
-    </figure>
-
-    <h2>Spikes, not floats</h2>
-    <p>Biological neurons don't stream 32-bit numbers. They fire discrete voltage spikes — and only when a threshold is crossed. <strong>Spiking Neural Networks</strong> mimic this: between spikes, most transistors draw near-zero power. The efficiency gap is not incremental.</p>
+    <h2>Nodes: one job, one process</h2>
+    <p>Each specialist is a <strong>node</strong> — a running program with exactly one job. Read a sensor. Compute a path. Fire a motor command. Every node lives in its own process, so when one falls over, the rest keep humming along, none the wiser.</p>
+    <p>How many are we talking about? On a real robot, <strong>twenty to fifty nodes</strong> run at once — camera driver, IMU, SLAM, obstacle detector, controller, logger, visualizer — a whole city of tiny programs, each minding its own business.</p>
 
     <div class="viz">
-      <svg viewBox="0 0 320 150" width="100%" role="img" aria-label="Energy per inference by chip">
-        <line x1="14" y1="120" x2="306" y2="120" stroke="rgba(255,255,255,.12)"/>
-        <rect x="34"  y="20"  width="52" height="100" rx="5" fill="#6AA0FF"/>
-        <rect x="134" y="86"  width="52" height="34"  rx="5" fill="#6AA0FF" opacity="0.5"/>
-        <rect x="234" y="104" width="52" height="16"  rx="5" fill="#6AA0FF" opacity="0.35"/>
-        <text x="60"  y="138" fill="rgba(255,255,255,.6)" font-size="11" text-anchor="middle" font-family="monospace">H100</text>
-        <text x="160" y="138" fill="rgba(255,255,255,.6)" font-size="11" text-anchor="middle" font-family="monospace">Loihi</text>
-        <text x="260" y="138" fill="rgba(255,255,255,.6)" font-size="11" text-anchor="middle" font-family="monospace">Akida</text>
+      <svg viewBox="0 0 320 170" width="100%" role="img" aria-label="Publish-subscribe message bus">
+        <rect x="8" y="71" width="72" height="30" rx="6" fill="#1A1D23" stroke="rgba(255,255,255,.14)"/>
+        <text x="44" y="90" fill="#F4F5F6" font-size="11" text-anchor="middle" font-family="monospace">LIDAR</text>
+        <line x1="80" y1="86" x2="116" y2="86" stroke="#6AA0FF" stroke-width="2"/>
+        <rect x="118" y="72" width="84" height="28" rx="14" fill="#6AA0FF"/>
+        <text x="160" y="91" fill="#08090B" font-size="11" text-anchor="middle" font-family="monospace" font-weight="700">/scan</text>
+        <line x1="202" y1="86" x2="240" y2="35" stroke="rgba(106,160,255,.5)" stroke-width="2"/>
+        <line x1="202" y1="86" x2="240" y2="86" stroke="rgba(106,160,255,.5)" stroke-width="2"/>
+        <line x1="202" y1="86" x2="240" y2="137" stroke="rgba(106,160,255,.5)" stroke-width="2"/>
+        <rect x="242" y="21" width="70" height="28" rx="6" fill="#1A1D23" stroke="rgba(255,255,255,.14)"/>
+        <text x="277" y="39" fill="#F4F5F6" font-size="10" text-anchor="middle" font-family="monospace">SLAM</text>
+        <rect x="242" y="72" width="70" height="28" rx="6" fill="#1A1D23" stroke="rgba(255,255,255,.14)"/>
+        <text x="277" y="90" fill="#F4F5F6" font-size="10" text-anchor="middle" font-family="monospace">planner</text>
+        <rect x="242" y="123" width="70" height="28" rx="6" fill="#1A1D23" stroke="rgba(255,255,255,.14)"/>
+        <text x="277" y="141" fill="#F4F5F6" font-size="10" text-anchor="middle" font-family="monospace">logger</text>
       </svg>
-      <div class="cap">Relative energy per inference — lower is better</div>
+      <div class="cap">One publisher, many subscribers — nobody knows who's listening</div>
     </div>
 
-    <h3>How a spiking neuron fires</h3>
-    <ol>
-      <li>Dendrites accumulate weighted input from upstream neurons.</li>
-      <li>The membrane potential climbs toward a <strong>threshold voltage</strong>.</li>
-      <li>At threshold the neuron emits a single <strong>spike</strong> — a ~1 ms pulse.</li>
-      <li>Local potential resets to zero; the transistor goes fully idle.</li>
-    </ol>
+    <h2>Topics: fire and forget</h2>
+    <p>Nodes never call each other directly. They <em>broadcast</em>. A node publishes messages onto a named channel — a <strong>topic</strong> — like a radio station firing into the air. Anyone tuned in receives it instantly. The station never checks who's listening; the listeners never learn who's transmitting. That deliberate ignorance is the whole point: it's what lets you rip out the path planner and bolt in a smarter one without touching another line of code.</p>
+    <pre><code># the LIDAR node broadcasts raw scans
+    pub = rospy.Publisher('/scan', LaserScan, queue_size=10)
+    pub.publish(scan_msg)
 
-    <h2>The software problem</h2>
-    <p>Hardware is the easy part. The hard part is rewriting decades of frameworks — <code>PyTorch</code> and <code>JAX</code> have no native concept of a spike. A minimal training step looks less like matrix multiplication and more like a physics loop:</p>
+    # the SLAM node just listens — its callback fires on every message
+    rospy.Subscriber('/scan', LaserScan, slam_callback)</code></pre>
 
-    <pre><code>for t in range(T):
-    mem += W @ spikes_in        # integrate
-    spikes_out = mem > threshold # fire
-    mem[spikes_out] = 0          # reset</code></pre>
+    <h2>Services: when you actually need an answer</h2>
+    <p>Topics are perfect for firehoses — sensor readings and velocity commands streaming forever. But sometimes a node needs to <em>ask a question</em> and wait for the reply: "Is there an obstacle at X?" "Save this map." That's a <strong>service</strong> — a client sends a request, the server answers, the client waits.</p>
+    <pre><code>rospy.wait_for_service('/check_obstacle')
+    check = rospy.ServiceProxy('/check_obstacle', CheckObstacle)
+    result = check(x=1.5, y=2.0)   # blocks until the answer comes back</code></pre>
+
+    <h2>rosmaster: the matchmaker that vanishes</h2>
+    <p>So how do a publisher and a subscriber ever find each other if neither knows the other exists? A hidden registry called <strong>rosmaster</strong>. When a node boots, it tells rosmaster what it publishes and what it wants. When two nodes turn out to care about the same topic, rosmaster introduces them — and then, crucially, gets out of the way. From that moment the messages flow node to node, peer to peer.</p>
+    <blockquote>
+      <p>rosmaster doesn't relay messages. It's a phonebook, not a post office.</p>
+    </blockquote>
+
+    <h2>ROS 1 vs ROS 2: the quiet revolution</h2>
+    <p>The original design had one fatal flaw: a single rosmaster that, if it died, took the whole robot down with it. ROS 2 threw it out entirely and swapped in <strong>DDS</strong> — an industrial real-time standard — so nodes discover each other with no central point of failure. That one change turned ROS from a research toy into something you can actually ship.</p>
+    <table>
+      <thead><tr><th>&nbsp;</th><th>ROS 1</th><th>ROS 2</th></tr></thead>
+      <tbody>
+        <tr><td>Discovery</td><td>Central rosmaster</td><td>Peer-to-peer DDS</td></tr>
+        <tr><td>Transport</td><td>TCP</td><td>Real-time DDS</td></tr>
+        <tr><td>Multi-robot</td><td>Bolted on</td><td>Native</td></tr>
+        <tr><td>Best for</td><td>Prototyping</td><td>Production fleets</td></tr>
+        <tr><td>Status</td><td>EOL 2025</td><td>The future</td></tr>
+      </tbody>
+    </table>
 
     <div class="callout">
-      <div class="k">The bottom line</div>
-      <p>If spiking-network compilers reach production quality before the next GPU generation ships, the 2030 data-centre could look radically different — quieter, cooler, and drawing a fraction of the power. If they don't, brute-force silicon wins another round.</p>
+      <div class="k">The mental model</div>
+      <p>ROS is a publish-subscribe message bus for robot programs. Each program is a node. Nodes broadcast onto named topics; others subscribe and react. Services handle the questions that need answers. rosmaster — or DDS in ROS 2 — runs the introductions. Every piece is swappable without disturbing the rest, and <em>that</em> modularity is why, when a new robot boots up in a lab tonight, the odds are overwhelming that ROS is already running inside it.</p>
+    </div>
+    """#
+
+    // Rewritten from content/okf-reader.html
+    static let okf = #"""
+    <p class="lead">Foundation models can write code, summarize a document, and analyze a dataset in seconds. Ask one how your company computes "weekly active users," though, and it goes quiet — because the answer isn't in the model. It's scattered across six systems that were never built to talk to each other.</p>
+
+    <p>That gap — between a capable model and the messy, specific knowledge an organization actually runs on — is the real bottleneck for enterprise AI in 2026. Google's proposed fix is almost cheeky in its simplicity. Not a platform. Not an API. A <strong>folder of markdown files</strong>.</p>
+
+    <h2>The knowledge is everywhere, and nowhere</h2>
+    <p>When an agent needs to answer a real question, it has to stitch the answer together from surfaces that all speak different languages:</p>
+    <ul>
+      <li><strong>Metadata catalogs</strong> — each with its own SDK, knowledge locked behind an API.</li>
+      <li><strong>Wikis and drives</strong> — Confluence, Notion, Drive: human-readable, barely machine-readable.</li>
+      <li><strong>Code comments</strong> — buried in repos, no standard shape, no way to discover them.</li>
+      <li><strong>Senior engineers' heads</strong> — the most accurate source, and the least accessible.</li>
+    </ul>
+    <p>So every agent builder re-solves the same context problem from scratch, and every vendor reinvents the same data model. OKF's answer is to stop building services and agree on a <em>format</em>.</p>
+
+    <h2>The pattern nobody named</h2>
+    <blockquote>
+      <p>LLMs don't get bored, don't forget to update a cross-reference, and can touch 15 files in one pass. The bookkeeping that causes humans to abandon personal wikis is exactly what LLMs are good at.</p>
+      <cite>Andrej Karpathy</cite>
+    </blockquote>
+    <p>Teams building agents kept independently arriving at the same trick: give the agent a shared markdown library it can read and update. Obsidian vaults wired to coding agents, <code>AGENTS.md</code> and <code>CLAUDE.md</code> files, repos full of <code>index.md</code>. The pattern was everywhere — but every version was bespoke, and none could talk to another. OKF just standardizes the handful of conventions needed to make them interoperate.</p>
+
+    <h2>A directory that becomes a graph</h2>
+    <p>An OKF bundle is a directory. Each file is one concept — a table, a metric, a runbook. The file path is its identity; markdown links between files are the edges.</p>
+    <pre><code>sales/
+    ├── index.md            ← bundle root
+    ├── tables/
+    │   ├── orders.md
+    │   └── customers.md    ← linked via markdown
+    └── metrics/
+        └── weekly_active_users.md</code></pre>
+    <p>Each concept file carries a small block of YAML frontmatter for the fields that must be queryable, and a markdown body for everything else:</p>
+    <pre><code>---
+    type: BigQuery Table
+    title: Orders
+    tags: [sales, revenue]
+    ---
+    # Joins
+    Joined with [customers](/tables/customers.md) on customer_id.</code></pre>
+    <p>That last link isn't a comment — it's a typed, traversable edge. "Join this table on <code>customer_id</code>" becomes something an agent can <em>walk</em>, not just read.</p>
+
+    <h2>Three rules that keep it from becoming another silo</h2>
+    <div class="callout">
+      <div class="k">Design principles</div>
+      <ol>
+        <li><strong>Minimally opinionated</strong> — the only required field is <code>type</code>. Everything else is up to the producer.</li>
+        <li><strong>Producer/consumer independence</strong> — a human can author a bundle an agent consumes; one model can write what another queries.</li>
+        <li><strong>Format, not platform</strong> — no cloud, no account, no SDK, ever. A knowledge format's value comes from how many parties speak it, not who owns it.</li>
+      </ol>
     </div>
 
-    <p>Either way, the industry has finally admitted the uncomfortable truth: the way we compute, not just how fast, is now the thing standing between us and the next model.</p>
+    <p>The full v0.1 spec fits on a single page — by design. A bundle ships as a tarball, lives in any git repo, renders on GitHub, and diffs cleanly in a pull request. The bet underneath it is easy to underestimate: the fix for fragmented AI context isn't a smarter platform you have to onboard into — it's a format so trivial to produce and consume that the ecosystem adopts it without asking permission.</p>
+    """#
+
+    // Rewritten from content/logto-reader.html
+    static let logto = #"""
+    <p class="lead">Every SaaS app needs the exact same things: users sign in, accounts stay secure, enterprise customers bring their own identity provider, and different people get different permissions. None of it is novel. All of it takes months to build correctly — and each piece has a CVE waiting if you get it wrong.</p>
+
+    <p>Logto is the open-source escape hatch: a certified OpenID Connect provider you drop in front of your app to get sign-in, social login, passkeys, MFA, enterprise SSO, and role-based access — built <em>on</em> the standards instead of around them.</p>
+
+    <h2>Build it yourself, or don't</h2>
+    <p>Rolling your own auth means owning sessions, password hashing, token issuance, refresh-token rotation, PKCE, TOTP, and SAML SSO flows — each one a rabbit hole, each one a place to leak credentials. Logto ships all of it already implemented, audited, and spec-compliant. You configure it, call the SDK, and validate a JWT. Your app gets to stay in the business of being your app.</p>
+
+    <h2>The clean split at its core</h2>
+    <p>Logto is built on OIDC sitting on top of OAuth 2.1, and the division of labor is crisp:</p>
+    <ul>
+      <li><strong>OAuth 2.1 — authorization.</strong> Issues scoped, expiring access tokens that prove a client may call an API. Your API validates the token; no round-trip to Logto needed.</li>
+      <li><strong>OIDC — authentication.</strong> Issues an ID token: a signed JWT of verified claims (email, name, <code>sub</code>) so your app knows <em>who</em> just logged in.</li>
+    </ul>
+    <p>It runs exactly one end-user flow — Authorization Code with PKCE, the modern standard. No implicit flow, no password grant; OAuth 2.1 deprecated those for good reason.</p>
+
+    <h2>Tenants as first-class citizens</h2>
+    <p>Most auth systems make you build "organizations" yourself. Logto models them natively — a user can belong to many orgs, hold a different role in each, and receive org-scoped tokens. Sign in with a company email and Logto routes you to that company's Okta or Azure AD automatically, with no code change on your side.</p>
+    <pre><code>const token = await logto.getAccessToken({
+      resource: 'https://api.yourapp.com',
+      organizationId: 'org_abc123',
+    });
+    // JWT: { sub, aud, scope: 'manage:members view:analytics', org_id }</code></pre>
+
+    <h2>Auth for agents, too</h2>
+    <p>The timely part: Logto now treats AI agents as what they are — OAuth clients with unusual trust requirements. Via <strong>Token Exchange</strong> (RFC 8693), an agent can swap a user's token for one scoped only to what the agent needs, not everything the user can do. Least privilege, applied to autonomous software.</p>
+
+    <div class="callout">
+      <div class="k">The core idea</div>
+      <p>A JWT access token is an audienced, scoped, signed <em>capability</em>. Logto's whole job is to issue the right token, with the right scopes, for the right resource, in the right org — and yours is simply to validate it. At 12k GitHub stars and v1.40, it's well past experiment and into serious-infrastructure territory.</p>
+    </div>
+    """#
+
+    // Rewritten from content/ai-berkshire-reader.html
+    static let aiBerkshire = #"""
+    <p class="lead">Ask any chatbot to analyze a stock and you'll get a polished, balanced, thoughtful essay that ends with "investors should conduct their own due diligence" — in other words, useless for making a decision. One developer decided the problem wasn't the AI. It was the lack of discipline.</p>
+
+    <p>AI Berkshire is a set of Claude Code commands that turn a single investor into a research firm. Each one runs a four-master methodology — Buffett, Munger, Duan Yongping, and Li Lu — as four independent agents that search, score, and <em>argue</em> before a team lead forces an actual conclusion. Not "balanced analysis." A buy, a pass, or an honest grey zone, with price targets.</p>
+
+    <blockquote>
+      <p>Price is what you pay, value is what you get.</p>
+      <cite>Warren Buffett</cite>
+    </blockquote>
+
+    <h2>Four masters, designed to disagree</h2>
+    <p>The trick is that the four lenses aren't complements — they're built to collide. Buffett says "cheap." Li Lu says "not certain enough." Duan asks "is this even a good business?" Munger asks "how does it die?" That tension is what produces a usable answer instead of a shrug.</p>
+    <ul>
+      <li><strong>Duan Yongping — business essence.</strong> Is this a good business at all, before any numbers?</li>
+      <li><strong>Warren Buffett — moat + valuation.</strong> Durable advantage, then price below intrinsic value.</li>
+      <li><strong>Charlie Munger — inversion.</strong> Forces failure scenarios <em>before</em> success ones, and checks the AI's own biases.</li>
+      <li><strong>Li Lu — the long arc.</strong> Is this business still here in ten years? Often the tie-breaker.</li>
+    </ul>
+
+    <h2>Four agents, running at once</h2>
+    <p>Crucially, <code>/investment-team</code> doesn't split one prompt into four sections — it spawns four fully independent agents, each with its own web access and its own conclusion, which may contradict the others. Four times the search volume, four verdicts to reconcile. And because LLMs can't do arithmetic, every number that matters runs through a Python module using exact decimal math — market-cap checks, cross-source validation, even a Benford's-Law fraud sniff test.</p>
+
+    <h2>The uncomfortable part</h2>
+    <p>The project leads not with a backtest but with a screenshot of a real brokerage account — two years of live trading:</p>
+    <table>
+      <thead><tr><th>Strategy</th><th>2024</th><th>2025 YTD</th></tr></thead>
+      <tbody>
+        <tr><td>AI Berkshire (live)</td><td>+69.3%</td><td>+66.4%</td></tr>
+        <tr><td>S&amp;P 500</td><td>+23.3%</td><td>+16.4%</td></tr>
+        <tr><td>Nasdaq</td><td>+28.6%</td><td>+20.4%</td></tr>
+        <tr><td>CSI 300</td><td>+14.7%</td><td>+17.7%</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="k">The real bet</div>
+      <p>The bottleneck in investment research was never access to information — any investor can read an annual report. It's the discipline to process it the same way every time. The value here isn't the AI; it's the structured methodology the AI is forced to follow. Two years of beating every major benchmark isn't proof it always works — but it's unusually honest evidence that, so far, it has. <em>Not investment advice.</em></p>
+    </div>
+    """#
+
+    // Rewritten from content/openpilot-reader.html
+    static let openpilot = #"""
+    <p class="lead">For $299 and a plug behind your rear-view mirror, openpilot quietly hijacks your car's own steering and cruise-control wiring and hands the driving to a neural network. Its latest release did something stranger still: it learned to drive entirely inside a simulation that taught <em>itself</em> the laws of physics from dashcam video.</p>
+
+    <p>First, the important caveat: this is not a self-driving car. It's a Level 2 co-pilot — the same category as Tesla Autopilot — that keeps your hands on the wheel and watches your eyes with an inward camera. Step on the brake and you're instantly back in control. What it replaces is the <em>brain</em> behind your car's factory cruise and lane-centering, with a model trained on millions of miles of real driving.</p>
+
+    <h2>It speaks your car's own language</h2>
+    <p>Modern cars run a <strong>CAN bus</strong> — the wire network connecting engine, brakes, steering, and cameras. Your factory driver-assist already sends commands over it; openpilot simply intercepts that bus and sends better ones, through the same connector the OEM cameras use. From the car's point of view, it just looks like a smarter version of what it already had.</p>
+    <p>The safety story is architectural, not just procedural. A separate microcontroller called <strong>panda</strong> — dumb, dedicated, written in review-hardened C — enforces hard limits on every command before it reaches the bus. Even if the neural network goes rogue, panda won't pass a dangerous signal. It doesn't trust the model.</p>
+
+    <h2>A robot trained inside a dream</h2>
+    <p>The March 2026 release, 0.11, is the milestone. Earlier versions trained the driver against a hand-coded simulator — which could only fake small steering nudges, and which the network learned to <em>cheat</em> by exploiting rendering artifacts that don't exist in reality. Adding more rules just made it brittle.</p>
+    <p>So comma replaced the simulator with a <strong>World Model</strong>: a 2-billion-parameter network that watched 2.5 million minutes of driving and learned to predict what the camera sees next, given an action. The training loop became almost poetic:</p>
+    <ol>
+      <li>Train the World Model to dream realistic driving video from raw fleet footage — no human labels.</li>
+      <li>Train a <em>smaller</em> driving policy by letting it act inside that dream and improve.</li>
+    </ol>
+    <p>The key insight: because the policy is smaller than the world it plays in, it can't memorize its way to cheating — and unlike a hand-coded simulator, this one just gets better with more data. comma says it's the first real-world robot shipped to users that was trained entirely this way.</p>
+
+    <div class="callout">
+      <div class="k">Why it matters past your commute</div>
+      <p>Train a policy inside a learned simulation, then deploy it into reality — that template applies to any robot where real data is cheap but hand-coded physics is brittle: warehouse arms, drones, inspection bots. openpilot is a consumer product quietly funding a frontier robotics lab, and it just open-sourced the lab's latest output to the 61,000 people watching on GitHub.</p>
+    </div>
+    """#
+
+    // Rewritten from content/physisforcing-reader.html
+    static let physisforcing = #"""
+    <p class="lead">The best video models can now generate footage of a robot arm picking up an apple that looks completely real — until you step through it frame by frame and watch the apple drift sideways in mid-air, the gripper teleport, and a pushed box refuse to move. The video isn't ugly. It's <em>impossible</em>.</p>
+
+    <p>That matters more than it sounds. When these videos are used as a "world model" to train robot policies, physically wrong predictions teach the robot the wrong lessons about what actions are even possible. A new paper from Peking University and NVIDIA, <strong>PhysisForcing</strong>, fixes it — not with more data or a bigger model, but by teaching the model exactly <em>where</em> physics lives.</p>
+
+    <h2>Two ways to break reality</h2>
+    <ul>
+      <li><strong>Local — trajectory discontinuity.</strong> The gripper jumps between frames; contact forces blink in and out. Motion isn't smooth.</li>
+      <li><strong>Global — relational inconsistency.</strong> A grasped object drifts away from the hand; a pushed object stays put. Geometry looks fine locally, but the <em>causality</em> between objects is wrong.</li>
+    </ul>
+
+    <h2>Why ordinary fine-tuning fails</h2>
+    <p>Standard training treats every pixel equally — the blank wall, the static floor, and the one tiny contact zone where the actual physics is happening all get the same weight. The signal that matters is diluted to near-zero before it can steer anything. PhysisForcing's insight: physical evidence is <em>spatially concentrated</em>. So first, find those regions — using a point tracker and a depth estimator to flag pixels that both move a lot and sit in the foreground — then supervise only there.</p>
+
+    <h2>Two losses, two levels</h2>
+    <p>With the physics-critical mask in hand, it applies two complementary losses that stack because they fix different errors:</p>
+    <ol>
+      <li><strong>Pixel-level</strong> — aligns per-point motion inside the mask, steering the transformer's internal features to track real point trajectories.</li>
+      <li><strong>Semantic-level</strong> — uses a frozen video encoder as a "physics teacher," matching which regions relate to which, so grasped objects stay coupled to the gripper.</li>
+    </ol>
+    <p>Both are thrown away at inference — <strong>zero extra cost at deployment</strong>.</p>
+
+    <table>
+      <thead><tr><th>Model</th><th>Overall</th><th>Manipulation</th></tr></thead>
+      <tbody>
+        <tr><td>Wan2.2 (base)</td><td>50.7</td><td>38.1</td></tr>
+        <tr><td>Wan2.2 (fine-tuned)</td><td>57.9</td><td>52.3</td></tr>
+        <tr><td>PhysisForcing</td><td>63.8</td><td>58.9</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="k">The broader lesson</div>
+      <p>Physical correctness turned out to be functional, not cosmetic: better rollouts lifted closed-loop planning from 16% to 24% success. When a generative model fails on a structured constraint, the right fix often isn't more scale — it's supervision aimed precisely at where the constraint actually lives.</p>
+    </div>
+    """#
+
+    // Rewritten from content/rcclx-reader.html
+    static let rcclx = #"""
+    <p class="lead">Everyone obsesses over how fast AI chips are. The quieter truth: when you run a large model across dozens of GPUs, up to 30% of the time is spent not computing — just waiting for the chips to talk to each other. Meta went hunting for that lost time on AMD hardware and clawed back a double-digit chunk of it.</p>
+
+    <p>The result is <strong>RCCLX</strong>, an open-source upgrade to AMD's GPU communication library with two ideas that need no changes to the model code you already run.</p>
+
+    <h2>Why the chatter costs so much</h2>
+    <p>Splitting a model across GPUs means they constantly swap partial results — "collective" operations like <code>AllReduce</code>. During <strong>decode</strong> (generating tokens one at a time), the work is memory-bound and this synchronization hits hardest: every token you see waits on it. Shave that latency and every word in a chat response arrives sooner.</p>
+
+    <h2>Idea 1: stop passing the bucket</h2>
+    <p>Classic AllReduce sends data around a ring of GPUs, so latency grows with the number of chips — <code>O(N)</code>. Meta's <strong>Direct Data Access</strong> lets each GPU read every other GPU's memory directly and reduce locally, collapsing that to roughly <code>O(1)</code>. It moves more total data, but far fewer synchronization rounds.</p>
+    <ul>
+      <li>10–50% faster AllReduce for small messages (the decode phase)</li>
+      <li>10–30% faster for the larger messages of prefill</li>
+      <li>~10% cut in time-to-incremental-token — the delay between words appearing</li>
+    </ul>
+
+    <h2>Idea 2: compress before you ship it</h2>
+    <p>The second trick is almost cheeky: why send 32-bit floats across the interconnect when 8-bit will do? Low-precision collectives quantize the <em>wire transfer</em> to FP8 — up to 4:1 compression — while keeping the actual math in full precision. The accuracy cost on a standard reasoning benchmark was about 0.3%; functionally invisible.</p>
+    <pre><code>import torchcomms
+    comm = torchcomms.new_comm("rcclx", torch.device("hip"), name="my_comm")
+    comm.allreduce(t, torchcomms.ReduceOp.SUM, async_op=False)
+    # the only AMD-specific parts are "rcclx" and "hip"</code></pre>
+    <p>To turn on the compression, you set one environment variable. No code changes.</p>
+
+    <div class="callout">
+      <div class="k">The bigger story</div>
+      <p>This is really about vendor diversification: hyperscalers no longer build for NVIDIA alone, and running production AI on AMD demands software <em>parity</em>, not just hardware. RCCLX's two durable ideas — skip the ring when you can read memory directly, and compress before you transmit — buy a ~10% latency win from smarter use of the wires between chips, not faster chips. As AMD scales up, those software wins compound.</p>
+    </div>
     """#
 }
 
