@@ -56,7 +56,8 @@ let sampleStories: [Story] = [
                    answer: "The software ecosystem is immature. PyTorch and JAX have no native SNN support, and porting existing models requires retraining from scratch. Hyperscalers also have massive sunk costs in GPU-optimised infrastructure and CUDA-trained engineers."),
             Prompt(question: "When could this realistically reach data centres?",
                    answer: "Industry analysts put meaningful hyperscaler adoption at 2028–2031, contingent on a PyTorch-compatible SNN compiler reaching production stability. Intel and IBM both have roadmaps targeting 2026 for inference-only workloads in niche domains like edge robotics."),
-        ]
+        ],
+        bodyHTML: ReaderContent.neuroChips
     ),
 
     // ── 2. Robotics branding ─────────────────────────────────────────────────

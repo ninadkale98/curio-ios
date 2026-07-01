@@ -96,8 +96,11 @@ struct Story: Identifiable, Codable, Hashable {
     let likes: Int
     let hue: Double            // 0–1, for gradient fallback
     let chatIntro: String      // one-line AI framing shown as opening bubble
-    let blocks: [ArticleBlock]
+    let blocks: [ArticleBlock] // REEL card payload: collapsed preview + double-tap inline expand
     let prompts: [Prompt]
+    // READER payload: full premium article as house-styled semantic HTML.
+    // Independent of `blocks`. If nil, the reader derives HTML from `blocks`.
+    var bodyHTML: String? = nil
 
     static func == (lhs: Story, rhs: Story) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
