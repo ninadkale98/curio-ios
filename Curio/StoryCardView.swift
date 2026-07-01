@@ -31,6 +31,7 @@ struct StoryCardView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .background(theme.surface)
+            .clipped()   // the collapsed preview overflows by design — keep it inside the card
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { toggleExpand() }
             .simultaneousGesture(horizontalSwipe)

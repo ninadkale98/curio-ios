@@ -14,7 +14,6 @@ struct NewsReelApp: App {
         }
     }
 
-    /// Large shared URLCache so image bytes survive relaunches and scrolling.
     private func configureImageDiskCache() {
         URLCache.shared = URLCache(
             memoryCapacity: 64 * 1024 * 1024,    // 64 MB
