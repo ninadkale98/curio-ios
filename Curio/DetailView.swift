@@ -107,6 +107,12 @@ private struct WebArticleView: UIViewRepresentable {
             parent.onScrollProgress(min(1, max(0, sv.contentOffset.y / scrollable)))
         }
 
+        // WKWebView can otherwise restore a prior scroll position for the same
+        // baseURL — every story should open at the top.
+        func webView(_ web: WKWebView, didFinish navigation: WKNavigation!) {
+            web.scrollView.setContentOffset(.zero, animated: false)
+        }
+
         @objc func handleClosePan(_ g: UIPanGestureRecognizer) {
             let v = g.view
             let tx = g.translation(in: v).x
@@ -163,10 +169,30 @@ enum ReaderHTML {
           </div>
           <div class="rule"></div>
           <article class="body">\(body)</article>
+          <script>\(highlightScript)</script>
         </body>
         </html>
         """
     }
+
+    // MARK: Tiny inline syntax highlighter — VSCode Dark+-style tokens for
+    // <pre><code> blocks (comments, strings, numbers, keywords, slash-commands).
+    // Not a full tokenizer, just enough to make code read as code, not gray text.
+    private static let highlightScript = #"""
+    document.querySelectorAll('pre code').forEach(function (block) {
+      var text = block.textContent
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      var re = /(#[^\n]*)|('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|(\b(?:def|class|import|from|return|if|elif|else|for|while|in|as|with|try|except|finally|raise|yield|lambda|None|True|False|and|or|not|is|const|let|var|function|await|async|new|export|struct|func|guard)\b)|(\/[a-zA-Z][\w-]*)/g;
+      block.innerHTML = text.replace(re, function (m, c, s, n, k, f) {
+        if (c) return '<span class="tok-c">' + c + '</span>';
+        if (s) return '<span class="tok-s">' + s + '</span>';
+        if (n) return '<span class="tok-n">' + n + '</span>';
+        if (k) return '<span class="tok-k">' + k + '</span>';
+        if (f) return '<span class="tok-f">' + f + '</span>';
+        return m;
+      });
+    });
+    """#
 
     // MARK: House stylesheet — dark, Curio fonts, premium reading defaults.
     private static func css(safeBottom: CGFloat) -> String {
@@ -190,7 +216,7 @@ enum ReaderHTML {
         }
         * { margin:0; padding:0; box-sizing:border-box; -webkit-text-size-adjust:100%; }
         html,body { background:var(--bg); }
-        body { font-family:var(--sans); color:var(--text); line-height:1.72;
+        body { font-family:var(--sans); color:var(--text); line-height:1.62;
                -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
         img { max-width:100%; }
 
@@ -203,31 +229,31 @@ enum ReaderHTML {
         .masthead { padding:22px 22px 0; }
         .eyebrow { font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.18em;
           color:var(--accent); text-transform:uppercase; }
-        h1.title { font-family:var(--display); font-weight:800; font-size:32px; line-height:1.12;
+        h1.title { font-family:var(--display); font-weight:800; font-size:26px; line-height:1.16;
           letter-spacing:-.02em; margin-top:12px; }
         .byline { display:flex; align-items:center; gap:11px; margin-top:18px; }
         .byline .chip { width:36px; height:36px; border-radius:9px; background:var(--elevated);
           display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12.5px; }
-        .byline .author { font-weight:600; font-size:14.5px; }
-        .byline .meta { font-size:12.5px; color:var(--faint); margin-top:3px; }
+        .byline .author { font-weight:600; font-size:13.5px; }
+        .byline .meta { font-size:12px; color:var(--faint); margin-top:3px; }
         .rule { height:1px; background:var(--line); margin:20px 22px 0; }
 
-        .body { padding:26px 22px calc(90px + var(--sb)); font-size:17.5px; }
-        .body > * + * { margin-top:22px; }
-        .body p { color:rgba(244,245,246,.92); line-height:1.75; }
-        .body .lead { font-size:20px; font-weight:500; line-height:1.62; color:var(--text); }
-        h2 { font-family:var(--display); font-weight:700; font-size:23px; line-height:1.25;
-          letter-spacing:-.01em; margin-top:38px; }
-        h3 { font-family:var(--display); font-weight:600; font-size:19px; margin-top:30px; }
+        .body { padding:26px 22px calc(90px + var(--sb)); font-size:15px; }
+        .body > * + * { margin-top:20px; }
+        .body p { color:rgba(244,245,246,.92); line-height:1.65; }
+        .body .lead { font-size:17px; font-weight:500; line-height:1.55; color:var(--text); }
+        h2 { font-family:var(--display); font-weight:700; font-size:19px; line-height:1.25;
+          letter-spacing:-.01em; margin-top:34px; }
+        h3 { font-family:var(--display); font-weight:600; font-size:16.5px; margin-top:26px; }
         .body strong { font-weight:700; color:var(--text); }
         .body em { font-style:italic; }
         .body a { color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(106,160,255,.35); }
         .body ul, .body ol { padding-left:22px; }
-        .body li { margin-top:9px; line-height:1.68; color:rgba(244,245,246,.9); }
+        .body li { margin-top:8px; line-height:1.6; color:rgba(244,245,246,.9); }
         .body li::marker { color:var(--accent); }
 
         blockquote { border-left:3px solid var(--accent); padding-left:18px; }
-        blockquote p { font-family:var(--display); font-weight:600; font-size:21px; line-height:1.4; color:var(--text); }
+        blockquote p { font-family:var(--display); font-weight:600; font-size:15px; line-height:1.45; color:var(--text); }
         blockquote cite { display:block; margin-top:10px; font-family:var(--mono); font-size:10.5px;
           letter-spacing:.06em; color:var(--accent); font-style:normal; text-transform:uppercase; }
 
@@ -247,6 +273,12 @@ enum ReaderHTML {
           overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.6; color:#c9d3e6; }
         p code, li code { background:var(--elevated); padding:2px 6px; border-radius:5px;
           font-family:var(--mono); font-size:.85em; color:#cdd6f4; }
+        /* VSCode Dark+-inspired token colors, applied by the tiny highlighter below */
+        .tok-c { color:#6A9955; font-style:italic; }
+        .tok-s { color:#CE9178; }
+        .tok-n { color:#B5CEA8; }
+        .tok-k { color:#C586C0; }
+        .tok-f { color:#4FC1FF; }
         hr { border:none; height:1px; background:var(--line); margin:34px 0; }
 
         /* helper: callout box */

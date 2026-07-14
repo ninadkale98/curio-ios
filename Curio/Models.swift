@@ -101,6 +101,9 @@ struct Story: Identifiable, Codable, Hashable {
     // READER payload: full premium article as house-styled semantic HTML.
     // Independent of `blocks`. If nil, the reader derives HTML from `blocks`.
     var bodyHTML: String? = nil
+    // Drives the Today tab filter (Calendar.isDateInToday). Defaults to now
+    // for sample/mock data that predates this column.
+    var publishedAt: Date = Date()
 
     // Explicit snake_case keys so this same type encodes straight into (and
     // decodes straight out of) the Supabase `stories` table columns — no
@@ -112,6 +115,7 @@ struct Story: Identifiable, Codable, Hashable {
         case imageURL = "image_url"
         case chatIntro = "chat_intro"
         case bodyHTML = "body_html"
+        case publishedAt = "published_at"
     }
 
     static func == (lhs: Story, rhs: Story) -> Bool { lhs.id == rhs.id }

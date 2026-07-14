@@ -9,7 +9,7 @@ struct NewsReelApp: App {
 
     var body: some Scene {
         WindowGroup {
-            FeedView()
+            RootTabView()
                 .preferredColorScheme(.dark)   // dark-forced for now
         }
     }

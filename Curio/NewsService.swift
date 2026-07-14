@@ -35,7 +35,21 @@ struct SupabaseNewsService: NewsService {
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
-        return try JSONDecoder().decode([Story].self, from: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            // Postgres timestamptz comes back as ISO8601 WITH fractional
+            // seconds — the default ISO8601DateFormatter rejects that unless
+            // told to expect it.
+            let withFractional = ISO8601DateFormatter()
+            withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFractional.date(from: raw) { return date }
+            let plain = ISO8601DateFormatter()
+            if let date = plain.date(from: raw) { return date }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(raw)")
+        }
+        return try decoder.decode([Story].self, from: data)
     }
 }
 
@@ -50,19 +64,27 @@ final class FeedViewModel {
     private(set) var stories: [Story] = []
     private(set) var state: LoadState = .idle
 
-    // Engagement state — in-memory for now.
-    // TODO: persist via SwiftData (@Model Engagement) or a backend sync; hydrate on launch.
+    // Local optimistic state, persisted to Supabase per-user via
+    // EngagementService when signed in (see hydrateEngagement/toggleLike/
+    // toggleSave). Stays local-only and resets each launch while signed
+    // out — sign-in isn't required to use the feed yet.
     var liked: Set<String> = []
     var saved: Set<String> = []
 
     private let service: NewsService
+    private let engagement = EngagementService()
+    private let auth: AuthViewModel?
 
-    init(service: NewsService = SupabaseNewsService()) {
+    init(service: NewsService = SupabaseNewsService(), auth: AuthViewModel? = nil) {
         self.service = service
+        self.auth = auth
     }
 
     func load() async {
-        guard state != .loading else { return }
+        switch state {
+        case .loading, .loaded: return   // already have stories — Today/Explore share this vm
+        case .idle, .failed: break
+        }
         state = .loading
         do {
             stories = try await service.fetchStories()
@@ -70,6 +92,16 @@ final class FeedViewModel {
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Pulls the signed-in user's real likes/saves from Supabase. Call after
+    /// a fresh sign-in or a restored session — a no-op while signed out.
+    func hydrateEngagement() async {
+        guard let token = auth?.session?.accessToken else { return }
+        async let likedIDs = try? engagement.fetchLiked(accessToken: token)
+        async let savedIDs = try? engagement.fetchSaved(accessToken: token)
+        if let likedIDs = await likedIDs { liked = likedIDs }
+        if let savedIDs = await savedIDs { saved = savedIDs }
     }
 
     // MARK: Engagement
@@ -81,20 +113,40 @@ final class FeedViewModel {
     }
 
     func toggleLike(_ id: String) {
-        if liked.contains(id) {
-            liked.remove(id)
-        } else {
-            liked.insert(id)
-            Haptics.pop()
+        let nowLiked = !liked.contains(id)
+        if nowLiked { liked.insert(id); Haptics.pop() } else { liked.remove(id) }
+
+        guard let session = auth?.session else { return }   // signed out — local only
+        Task {
+            do {
+                if nowLiked {
+                    try await engagement.like(storyID: id, userID: session.userID, accessToken: session.accessToken)
+                } else {
+                    try await engagement.unlike(storyID: id, accessToken: session.accessToken)
+                }
+            } catch {
+                // Write didn't persist — undo the optimistic update.
+                if nowLiked { liked.remove(id) } else { liked.insert(id) }
+            }
         }
     }
 
     func toggleSave(_ id: String) {
-        if saved.contains(id) {
-            saved.remove(id)
-        } else {
-            saved.insert(id)
-        }
+        let nowSaved = !saved.contains(id)
+        if nowSaved { saved.insert(id) } else { saved.remove(id) }
         Haptics.select()
+
+        guard let session = auth?.session else { return }
+        Task {
+            do {
+                if nowSaved {
+                    try await engagement.save(storyID: id, userID: session.userID, accessToken: session.accessToken)
+                } else {
+                    try await engagement.unsave(storyID: id, accessToken: session.accessToken)
+                }
+            } catch {
+                if nowSaved { saved.remove(id) } else { saved.insert(id) }
+            }
+        }
     }
 }

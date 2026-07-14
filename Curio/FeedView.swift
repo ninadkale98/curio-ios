@@ -191,8 +191,14 @@ private struct VerticalPager: UIViewControllerRepresentable {
 }
 
 // MARK: - FeedView
+// Shares one FeedViewModel across tabs (Today/Explore) so stories, likes, and
+// saves stay in sync; `filter` picks which of vm.stories this instance pages
+// through. Embedded inside RootTabView's pinned TabView, so only the top edge
+// bleeds under the status bar — the bottom respects the tab bar's own space.
 struct FeedView: View {
-    @State private var vm = FeedViewModel()
+    let vm: FeedViewModel
+    var filter: (Story) -> Bool = { _ in true }
+    var emptyMessage: String = "No stories yet"
     @State private var expandedID: String?
     @State private var detailStory: Story?
     @State private var detailProgress: CGFloat = 0    // 0 = reel, 1 = reader open
@@ -201,10 +207,13 @@ struct FeedView: View {
 
     private let reveal: Animation = .spring(response: 0.36, dampingFraction: 0.86)
 
+    private var stories: [Story] { vm.stories.filter(filter) }
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let insets = SafeArea.insets()
+            let topInset = SafeArea.insets().top      // notch/status bar height — constant
+            let bottomInset: CGFloat = 16              // breathing room above the pinned tab bar
             let dist = max(size.width * 0.6, 1)        // drag distance that = a full open/close
 
             ZStack {
@@ -215,14 +224,16 @@ struct FeedView: View {
                     ProgressView().controlSize(.large).tint(theme.accent)
                 case .failed(let m):
                     errorView(m)
+                case .loaded where stories.isEmpty:
+                    emptyView()
                 case .loaded:
-                    reel(size: size, insets: insets, dist: dist)
+                    reel(size: size, topInset: topInset, bottomInset: bottomInset, dist: dist)
                         // The reel recedes as the reader comes forward.
                         .scaleEffect(1 - detailProgress * 0.06)
                         .offset(x: -detailProgress * size.width * 0.22)
                         .overlay(
                             Color.black.opacity(detailProgress * 0.5)
-                                .ignoresSafeArea()
+                                .ignoresSafeArea(edges: .top)
                                 .allowsHitTesting(false)
                         )
                 }
@@ -234,8 +245,8 @@ struct FeedView: View {
                         onCloseDragEnded:  { tx, pred in closeDragEnded(tx, pred, dist) },
                         onClose: closeReader
                     )
-                    .environment(\.safeTop, insets.top)
-                    .environment(\.safeBottom, insets.bottom)
+                    .environment(\.safeTop, topInset)
+                    .environment(\.safeBottom, bottomInset)
                     .environment(\.theme, theme)
                     .preferredColorScheme(.dark)
                     .frame(width: size.width, height: size.height)
@@ -246,19 +257,19 @@ struct FeedView: View {
                 }
             }
             .frame(width: size.width, height: size.height)
-            .environment(\.safeTop, insets.top)
-            .environment(\.safeBottom, insets.bottom)
+            .environment(\.safeTop, topInset)
+            .environment(\.safeBottom, bottomInset)
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .top)
         .environment(\.theme, theme)
         .preferredColorScheme(.dark)
         .task { await vm.load() }
     }
 
     // MARK: Reel
-    private func reel(size: CGSize, insets: EdgeInsets, dist: CGFloat) -> some View {
+    private func reel(size: CGSize, topInset: CGFloat, bottomInset: CGFloat, dist: CGFloat) -> some View {
         VerticalPager(
-            pages: vm.stories.map { story in
+            pages: stories.map { story in
                 AnyView(
                     StoryCardView(
                         story: story,
@@ -271,11 +282,11 @@ struct FeedView: View {
                         onSave: { vm.toggleSave(story.id) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .environment(\.safeTop, insets.top)
-                    .environment(\.safeBottom, insets.bottom)
+                    .environment(\.safeTop, topInset)
+                    .environment(\.safeBottom, bottomInset)
                     .environment(\.theme, theme)
                     .preferredColorScheme(.dark)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(edges: .top)
                 )
             },
             scrollEnabled: expandedID == nil && detailStory == nil,
@@ -284,13 +295,13 @@ struct FeedView: View {
             onOpenPanChanged: { tx in openPanChanged(tx, dist) },
             onOpenPanEnded:  { tx, vx in openPanEnded(tx, vx, dist) }
         )
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .top)
     }
 
     // Changes only when a card's own appearance changes — NOT during the detail
     // transition — so the pager skips rebuilding its hosted cards every frame.
     private var contentKey: String {
-        let parts = vm.stories.map { s in
+        let parts = stories.map { s in
             "\(s.id):\(vm.isLiked(s.id) ? 1 : 0)\(vm.isSaved(s.id) ? 1 : 0):\(vm.likeCount(for: s))"
         }
         return (expandedID ?? "-") + "|" + parts.joined(separator: ",")
@@ -298,8 +309,8 @@ struct FeedView: View {
 
     // MARK: Open (swipe-left) — interactive, driven by the pager's UIKit pan
     private func openPanChanged(_ tx: CGFloat, _ dist: CGFloat) {
-        guard detailProgress < 1 else { return }
-        let story = vm.stories[min(max(currentPage, 0), vm.stories.count - 1)]
+        guard detailProgress < 1, !stories.isEmpty else { return }
+        let story = stories[min(max(currentPage, 0), stories.count - 1)]
         if detailStory?.id != story.id { detailStory = story }
         detailProgress = min(1, max(0, -tx / dist))
     }
@@ -337,6 +348,19 @@ struct FeedView: View {
     }
 
     // MARK: States
+    private func emptyView() -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 32))
+                .foregroundColor(theme.faint)
+            Text(emptyMessage)
+                .font(CurioFont.body(15))
+                .foregroundColor(theme.sub)
+                .multilineTextAlignment(.center)
+        }
+        .padding(40)
+    }
+
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
@@ -364,5 +388,5 @@ struct FeedView: View {
 }
 
 #Preview {
-    FeedView()
+    FeedView(vm: FeedViewModel(service: MockNewsService()))
 }
