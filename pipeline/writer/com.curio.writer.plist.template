@@ -2,8 +2,9 @@
 <!-- Template. Install to ~/Library/LaunchAgents/ (creds already live in
      pipeline/writer/.env.writer, so no secrets in this file), then:
        launchctl load ~/Library/LaunchAgents/com.curio.writer.plist
-     Runs the dispatcher every 30 min. Each tick writes at most one blog:
-     fresh items first, then the least-written modality, capped at 30/day. -->
+     Runs the dispatcher every 2h. Each tick spawns up to 5 writers in parallel:
+     3 for today's fresh items, 2 draining the least-written backlog modalities
+     (backlog capped ~30/day; fresh uncapped). -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -20,7 +21,7 @@
         <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>StartInterval</key>
-    <integer>1800</integer>
+    <integer>7200</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>

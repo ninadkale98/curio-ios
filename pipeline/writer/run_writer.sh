@@ -11,6 +11,13 @@ export SUPABASE_URL SB_ANON SB_SERVICE GITHUB_TOKEN PUSHOVER_TOKEN PUSHOVER_USER
 : "${CLAIM_FILE:?CLAIM_FILE not set — run via dispatch.py}"
 
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') writer run (item=$CLAIM_FILE) ==="
-claude -p "$(cat writer_prompt.md)" \
+# A trailing imperative so the instructions are executed as a task, not read as
+# reference material.
+PROMPT="$(cat writer_prompt.md)
+
+BEGIN NOW. This is your task, not a document to review. Read \$CLAIM_FILE and
+carry out every step: fetch the source, write the blog, and publish it via the
+RPCs end to end. Do not ask questions or merely summarize what to do."
+claude -p "$PROMPT" \
   --model sonnet \
   --dangerously-skip-permissions

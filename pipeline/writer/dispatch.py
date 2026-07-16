@@ -28,7 +28,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.expanduser("~/Library/Logs/curio-writer.log")
 LOG_MAX = 10 * 1024 * 1024
 
-DAILY_CAP = 30
+FRESH_SLOTS = 3       # writers per tick dedicated to today's newly-queued items
+BACKLOG_SLOTS = 2     # writers per tick draining the backlog
+DAILY_BACKLOG_CAP = 30  # safety ceiling on backlog blogs/day (fresh is uncapped)
 MODALITIES = ["github", "arxiv", "rss", "blog", "hn"]
 STRATEGY_WEIGHTS = [("top", 45), ("random", 35), ("recent", 20)]
 WRITER_TIMEOUT = 900
@@ -104,57 +106,81 @@ def claim(mode, source, strategy):
     return r.json()  # dict, or None
 
 
-def write(item, mode, source, strategy):
-    log(f"claimed {item['source']}/{item['source_key']} — {(item.get('title') or '')[:55]} [{mode}/{source}/{strategy}]")
-    fd, path = tempfile.mkstemp(prefix="curio-claim-", suffix=".json")
-    with os.fdopen(fd, "w") as f:
-        json.dump(item, f)
-    env = dict(os.environ, CLAIM_FILE=path)
-    try:
-        r = subprocess.run(["/bin/bash", os.path.join(HERE, "run_writer.sh")],
-                           env=env, capture_output=True, text=True, timeout=WRITER_TIMEOUT)
-        log((r.stdout or "")[-600:])
-        if r.returncode != 0:
-            log(f"ERROR writer exit {r.returncode}")
-            notify("Curio writer FAILED", f"exit {r.returncode} on {item['source']}/{item['source_key']} (see {LOG})")
-    except subprocess.TimeoutExpired:
-        log("ERROR writer timed out")
-        notify("Curio writer FAILED", f"timed out on {item['source']}/{item['source_key']} (see {LOG})")
-    finally:
+def _weighted_strategy():
+    return random.choices([s for s, _ in STRATEGY_WEIGHTS], weights=[w for _, w in STRATEGY_WEIGHTS])[0]
+
+
+def plan_jobs():
+    """Claim this tick's items: up to FRESH_SLOTS fresh, then up to BACKLOG_SLOTS
+    backlog across the least-written modalities. Returns [(item, label)]."""
+    jobs = []
+
+    # Fresh — today's newly-queued items (uncapped). Claim up to FRESH_SLOTS.
+    for _ in range(FRESH_SLOTS):
+        if not has_pending(fresh=True):
+            break
+        item = claim("fresh", None, "recent")
+        if not item:
+            break
+        jobs.append((item, "fresh/recent"))
+
+    # Backlog — 2 slots across the two least-written modalities (spreads them),
+    # capped for the day. counts includes fresh-done, so the cap is a combined
+    # safety ceiling on backlog spawning.
+    counts = written_today()
+    if sum(counts.values()) < DAILY_BACKLOG_CAP:
+        picks = sorted([s for s in MODALITIES if has_pending(source=s)], key=lambda s: counts[s])[:BACKLOG_SLOTS]
+        for src in picks:
+            strat = _weighted_strategy()
+            item = claim("backlog", src, strat)
+            if item:
+                jobs.append((item, f"backlog/{src}/{strat}"))
+
+    return jobs
+
+
+def run_batch(jobs):
+    """Spawn all writers in parallel, then collect each result."""
+    procs = []
+    for item, label in jobs:
+        fd, path = tempfile.mkstemp(prefix="curio-claim-", suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            json.dump(item, f)
+        log(f"spawn [{label}] {item['source']}/{item['source_key']} — {(item.get('title') or '')[:50]}")
+        p = subprocess.Popen(["/bin/bash", os.path.join(HERE, "run_writer.sh")],
+                             env=dict(os.environ, CLAIM_FILE=path),
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        procs.append((p, path, item, label))
+
+    for p, path, item, label in procs:
+        tag = f"{item['source']}/{item['source_key']}"
         try:
-            os.remove(path)
-        except OSError:
-            pass
+            out, _ = p.communicate(timeout=WRITER_TIMEOUT)
+            log(f"[{label}] {tag}: {(out or '').strip()[-300:]}")
+            if p.returncode != 0:
+                log(f"ERROR writer exit {p.returncode} on {tag}")
+                notify("Curio writer FAILED", f"exit {p.returncode} on {tag} (see {LOG})")
+        except subprocess.TimeoutExpired:
+            p.kill()
+            log(f"ERROR writer timed out on {tag}")
+            notify("Curio writer FAILED", f"timed out on {tag} (see {LOG})")
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 def main():
     reset_stale_claims()
     counts = written_today()
-    total = sum(counts.values())
-    log(f"tick — today: {counts} (total {total}/{DAILY_CAP})")
-
-    # 1. FRESH FIRST
-    if has_pending(fresh=True):
-        item = claim("fresh", None, "recent")
-        if item:
-            write(item, "fresh", "any", "recent")
-            return
-
-    # 2. BALANCED BACKLOG, capped
-    if total >= DAILY_CAP:
-        log("daily cap reached")
+    log(f"tick — today: {counts} (total {sum(counts.values())})")
+    jobs = plan_jobs()
+    if not jobs:
+        log("nothing to do this tick")
         return
-    available = [s for s in MODALITIES if has_pending(source=s)]
-    if not available:
-        log("no pending backlog")
-        return
-    source = min(available, key=lambda s: counts[s])
-    strategy = random.choices([s for s, _ in STRATEGY_WEIGHTS], weights=[w for _, w in STRATEGY_WEIGHTS])[0]
-    item = claim("backlog", source, strategy)
-    if item:
-        write(item, "backlog", source, strategy)
-    else:
-        log(f"claim returned null for {source}")
+    log(f"batch of {len(jobs)}: {[l for _, l in jobs]}")
+    run_batch(jobs)
 
 
 if __name__ == "__main__":

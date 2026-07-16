@@ -8,6 +8,14 @@ The item to write has ALREADY been claimed for you by the dispatcher. Read it
 from the JSON file at `$CLAIM_FILE` — it has `source`, `source_key`, `url`,
 `title`, `topic`, `raw_json`, `raw_text`. Do not claim anything yourself.
 
+**You run in PARALLEL with other writers.** Never use a fixed scratch filename
+like `/tmp/story.json` — parallel writers would clobber each other. Make one
+private working dir at the start and put ALL scratch files (downloaded images,
+the story JSON) inside it:
+```
+WORK=$(mktemp -d /tmp/curio-writer.XXXXXX)
+```
+
 Secrets are in your environment: `$SUPABASE_URL`, `$SB_ANON` (public anon key,
 for the RPCs), `$SB_SERVICE` (service key, ONLY for uploading images to
 Storage), `$GITHUB_TOKEN`, `$PUSHOVER_TOKEN`, `$PUSHOVER_USER`. Never print the
@@ -71,12 +79,13 @@ curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/mark_queue_status" \
 Then stop (report the skip in your final message; no Pushover).
 
 ### 4. Re-host the images you'll use
-For each real image you'll embed, download it, then upload to the public
-`blog-assets` bucket under a per-story slug path:
+For each real image you'll embed, download it into `$WORK`, then upload to the
+public `blog-assets` bucket under a per-story slug path (the slug isolates
+parallel writers in Storage too):
 ```
 curl -s -X POST "$SUPABASE_URL/storage/v1/object/blog-assets/<slug>/<name>.png" \
   -H "apikey: $SB_SERVICE" -H "Authorization: Bearer $SB_SERVICE" \
-  -H "content-type: image/png" -H "x-upsert: true" --data-binary @<file>
+  -H "content-type: image/png" -H "x-upsert: true" --data-binary @"$WORK/<name>.png"
 ```
 Its public URL is
 `$SUPABASE_URL/storage/v1/object/public/blog-assets/<slug>/<name>.png`.
@@ -90,8 +99,9 @@ for the real images, `.viz` cards with inline `<svg>` for generated diagrams,
 and a closing `.callout` bottom-line. `blocks` is the short plain-hook teaser.
 
 ### 6. Insert and finish
-Build the story JSON with a python3 script (write it to a temp file, POST it —
-do not hand-quote HTML in the shell). Fields: `id` (url-safe slug), `category`
+Build the story JSON with a python3 script (write it to `$WORK/story.json`, POST
+it — do not hand-quote HTML in the shell, and never a shared fixed path).
+Fields: `id` (url-safe slug), `category`
 (ALL CAPS, fitting the topic; check existing categories via
 `GET $SUPABASE_URL/rest/v1/stories?select=category` with the anon key), `source`
 (the project/author name, not "GitHub"), `mono` (2 letters), `author`, `date`
@@ -104,7 +114,7 @@ must be https).
 ```
 curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/insert_story" \
   -H "apikey: $SB_ANON" -H "Authorization: Bearer $SB_ANON" \
-  -H "Content-Type: application/json" -d @/tmp/story.json      # body: {"story": {...}}
+  -H "Content-Type: application/json" -d @"$WORK/story.json"   # body: {"story": {...}}
 ```
 On success (`"<slug>"` returned), mark the queue row done:
 ```
