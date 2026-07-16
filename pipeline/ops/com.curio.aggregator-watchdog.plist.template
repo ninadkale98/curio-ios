@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Template. Install to ~/Library/LaunchAgents/ with the two REPLACE_ME values
+     filled in (Pushover creds stay local, never committed), then:
+       launchctl load ~/Library/LaunchAgents/com.curio.aggregator-watchdog.plist
+     Runs the watchdog daily at 08:30 local time (after the 14:00 UTC Action). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.curio.aggregator-watchdog</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/ninad/experiment/Curio_ios/Curio/pipeline/ops/watchdog.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+        <key>PUSHOVER_TOKEN</key>
+        <string>REPLACE_ME</string>
+        <key>PUSHOVER_USER</key>
+        <string>REPLACE_ME</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/curio-watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/curio-watchdog.log</string>
+</dict>
+</plist>
