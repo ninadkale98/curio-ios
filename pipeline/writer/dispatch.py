@@ -42,8 +42,9 @@ SH = {"apikey": SB_SERVICE, "Authorization": f"Bearer {SB_SERVICE}", "Content-Ty
 
 
 def log(msg):
+    # Write only to the file — under launchd, stdout is already redirected to
+    # this same file, so also print()ing would double every line.
     line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}"
-    print(line, flush=True)
     try:
         if os.path.exists(LOG) and os.path.getsize(LOG) > LOG_MAX:
             os.replace(LOG, LOG + ".1")
