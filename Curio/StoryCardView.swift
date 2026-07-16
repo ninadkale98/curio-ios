@@ -21,7 +21,9 @@ struct StoryCardView: View {
     @Environment(\.safeBottom) private var safeBottom
     @State private var likeBump: CGFloat = 1
 
-    private var coverHeight: CGFloat { isExpanded ? 0.17 : 0.42 }
+    // Constant image height in both states — the cover no longer morphs/resizes
+    // on expand, so the image never re-crops. The whole image is shown (fit).
+    private var coverHeight: CGFloat { 0.40 }
 
     var body: some View {
         GeometryReader { geo in
@@ -54,23 +56,28 @@ struct StoryCardView: View {
     private func cover(geo: GeometryProxy) -> some View {
         let h = geo.size.height * coverHeight
 
-        ZStack(alignment: .topLeading) {
-            CachedAsyncImage(url: story.imageURL, hue: story.hue)
-                .frame(width: geo.size.width, height: h)
-                .clipped()
+        ZStack {
+            // Opaque greedy base — forces the cover to fill h even though the
+            // .fit image below is not greedy (otherwise the frame collapses to
+            // the image's fitted height).
+            theme.surface
+
+            // Fit (not fill) so the whole image shows, never cropped from the top.
+            CachedAsyncImage(url: story.imageURL, hue: story.hue, contentMode: .fit)
 
             // Status-bar legibility scrim.
-            LinearGradient(
-                colors: [.black.opacity(0.5), .clear],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: safeTop + 40)
-            .frame(maxWidth: .infinity)
+            VStack {
+                LinearGradient(
+                    colors: [.black.opacity(0.5), .clear],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: safeTop + 40)
+                Spacer()
+            }
             .allowsHitTesting(false)
         }
-        .frame(width: geo.size.width, height: h, alignment: .topLeading)
+        .frame(width: geo.size.width, height: h)
         .clipped()
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: isExpanded)
     }
 
     private var categoryPill: some View {
@@ -90,10 +97,10 @@ struct StoryCardView: View {
     private func content(geo: GeometryProxy) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(story.title)
-                .font(CurioFont.display(25, weight: .heavy))
+                .font(CurioFont.display(20, weight: .regular))
                 .foregroundColor(theme.text)
-                .tracking(-0.4)
-                .lineSpacing(1)
+                .tracking(-0.2)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 20)
 
@@ -116,15 +123,21 @@ struct StoryCardView: View {
     }
 
     // MARK: Body — collapsed (preview that fills + fades)
+    // Drawn as an overlay on a zero-minimum Color.clear so the preview's tall
+    // intrinsic height can't inflate the content and squeeze the cover. It fills
+    // whatever space is left and clips (with the bottom fade over it).
     private var collapsedBody: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            dek
-            ArticleBodyView(blocks: previewBlocks)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 18)
-        .clipped()
-        .allowsHitTesting(false)
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 18) {
+                    dek
+                    ArticleBodyView(blocks: previewBlocks)
+                }
+                .padding(.top, 18)
+            }
+            .clipped()
+            .allowsHitTesting(false)
     }
 
     // MARK: Body — expanded (full scroll)

@@ -87,13 +87,14 @@ enum AppFonts {
     static let displayHeavy   = "SchibstedGrotesk-ExtraBold"
     static let displayBold    = "SchibstedGrotesk-Bold"
     static let displaySemi    = "SchibstedGrotesk-SemiBold"
+    static let displayRegular = "SchibstedGrotesk-Regular"   // lightest Schibsted weight — clean, thin headlines
     static let bodyRegular    = "HankenGrotesk-Regular"
     static let bodyMedium     = "HankenGrotesk-Medium"
     static let bodySemi       = "HankenGrotesk-SemiBold"
     static let bodyBold       = "HankenGrotesk-Bold"
 
     private static let all = [
-        displayHeavy, displayBold, displaySemi,
+        displayHeavy, displayBold, displaySemi, displayRegular,
         bodyRegular, bodyMedium, bodySemi, bodyBold
     ]
 
@@ -114,6 +115,8 @@ enum CurioFont {
     static func display(_ size: CGFloat, weight: Font.Weight = .heavy) -> Font {
         let name: String
         switch weight {
+        case .light, .regular, .thin, .ultraLight:
+                               name = AppFonts.displayRegular
         case .semibold:        name = AppFonts.displaySemi
         case .bold:            name = AppFonts.displayBold
         default:               name = AppFonts.displayHeavy

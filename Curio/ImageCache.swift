@@ -64,6 +64,9 @@ final class ImageLoader: ObservableObject {
 struct CachedAsyncImage: View {
     let url: String
     let hue: Double
+    /// `.fill` crops to fill the frame (default). `.fit` shows the whole image,
+    /// letterboxed against the hue fallback — used for cards so nothing is cut.
+    var contentMode: ContentMode = .fill
     @StateObject private var loader = ImageLoader()
 
     var body: some View {
@@ -73,7 +76,7 @@ struct CachedAsyncImage: View {
             if let img = loader.image {
                 Image(uiImage: img)
                     .resizable()
-                    .scaledToFill()
+                    .aspectRatio(contentMode: contentMode)
                     .transition(.opacity)
             }
         }
