@@ -122,9 +122,13 @@ def iter_topics(backfill, existing_keys, existing_story_urls=frozenset(), done_t
             continue
         items = []
         for s in fetch_stories_for_query(query, min_score, days_back):
+            # Require an external link — an Ask/Tell HN that only points to its
+            # own discussion thread is conversation, not content. Show HN that
+            # links to a real project/repo keeps its external url and stays.
+            if not s["external_url"]:
+                continue
             hid = s["hn_id"]
-            url = s["external_url"] or s["hn_url"]
-            if hid in existing_keys or hid in seen or url in existing_story_urls or not s["title"]:
+            if hid in existing_keys or hid in seen or s["external_url"] in existing_story_urls or not s["title"]:
                 continue
             seen.add(hid)
             items.append(_to_queue_item(s))
