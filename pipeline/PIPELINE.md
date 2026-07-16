@@ -5,11 +5,52 @@ A two-wing system that keeps Curio's feed growing without manual authoring.
 - **Aggregator wing** (this folder, built): fetches candidates from many sources,
   dedups them, and writes them into a Supabase `content_queue` table as
   `pending`. Deterministic, no LLM. Runs daily via GitHub Actions.
-- **Writer wing** (not built yet): drains `content_queue` FIFO / by signal, does
-  the editorial write (restructure into a Curio blog per
-  `../CURIO_BLOG_SPEC.md`), inserts into `stories`, marks the row `done`.
+- **Writer wing** (`writer/`, LIVE): drains `content_queue` by signal, does the
+  editorial write (a real Curio blog per `../CURIO_BLOG_SPEC.md`, with real
+  source images re-hosted + generated SVG), inserts into `stories`, marks the
+  row `done`. LLM-in-the-loop via headless `claude -p`. Runs LOCALLY via launchd
+  (Claude cloud routines are network-blocked — can't reach github/arxiv/Supabase).
 
 The two wings are independent so their cadences tune separately.
+
+## Writer wing (`writer/`)
+
+Runs on **your Mac** via `~/Library/LaunchAgents/com.curio.writer.plist` (every
+2h). `claude` cloud routines can't be used — their sandbox blocks egress to
+github/arxiv/Supabase; the local machine and GitHub Actions can reach them.
+
+Per tick, `dispatch.py`:
+1. Resets stale claims (a crashed writer's `claimed` rows >20min old → `pending`).
+2. Spawns up to **5 `claude -p` writers in parallel**: **3** for today's fresh
+   items (`created_at >= today`), **2** draining the two least-written backlog
+   modalities (mixed velocity/random/recency strategy). Fresh uncapped; backlog
+   capped `DAILY_BACKLOG_CAP`/day.
+3. Claims each item deterministically (atomic `claim_next_item` RPC — the
+   dispatcher claims, not the writer, so source/strategy are exact), writes the
+   item JSON to a temp file, hands it off.
+
+Each writer (`run_writer.sh` → headless `claude -p --model sonnet
+--dangerously-skip-permissions`, prompt = `writer_prompt.md` + a "BEGIN NOW"
+kickoff so the markdown is executed, not just read): makes a private
+`$WORK=$(mktemp -d)` (parallel-safe), reads `$CLAIM_FILE`, fetches the source
+(README / ar5iv figures / article page), quality-gates (skip star-farms/stubs),
+re-hosts real images to Supabase Storage bucket `blog-assets`, writes both
+payloads (`blocks` + `body_html`) per the voice rules, inserts via `insert_story`
+RPC, marks the queue row `done`. Blogs start at `likes = 0`.
+
+DB access is three anon-callable SECURITY DEFINER RPCs (migrations 0007/0008), so
+no service_role is embedded in the writer for DB writes (service_role is used
+only for Storage image uploads): `claim_next_item(mode, source, strategy)`,
+`insert_story(jsonb)`, `mark_queue_status(...)`, plus `written_today_by_source()`
+and `refresh_rank_scores()`.
+
+Secrets: `writer/.env.writer` (gitignored). Monitoring: persistent log
+`~/Library/Logs/curio-writer.log`; Pushover only on failures + a daily rollup
+(via `ops/watchdog.sh`) — no per-blog pings. Tuning knobs: `FRESH_SLOTS`,
+`BACKLOG_SLOTS`, `DAILY_BACKLOG_CAP` in `dispatch.py`; `StartInterval` in the plist.
+
+To resume in a fresh session: read `content_pipeline` in memory (auto-loaded) and
+this file. The writer runs unattended once the Mac is on.
 
 ## Channels (all live)
 
