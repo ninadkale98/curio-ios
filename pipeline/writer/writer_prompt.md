@@ -68,7 +68,7 @@ curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/mark_queue_status" \
   -H "apikey: $SB_ANON" -H "Authorization: Bearer $SB_ANON" -H "Content-Type: application/json" \
   -d "{\"p_source\":\"<source>\",\"p_source_key\":\"<source_key>\",\"p_status\":\"skipped\",\"p_error\":\"<short reason>\"}"
 ```
-Pushover "Curio writer: skipped <title> (<reason>)" and stop.
+Then stop (report the skip in your final message; no Pushover).
 
 ### 4. Re-host the images you'll use
 For each real image you'll embed, download it, then upload to the public
@@ -113,9 +113,6 @@ curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/mark_queue_status" \
   -d "{\"p_source\":\"<source>\",\"p_source_key\":\"<source_key>\",\"p_status\":\"done\"}"
 ```
 If `insert_story` errors with "already covered", the item is a duplicate: mark
-it `done` anyway and stop. Then Pushover "Curio writer: wrote <title>".
-```
-curl -s --form-string "token=$PUSHOVER_TOKEN" --form-string "user=$PUSHOVER_USER" \
-  --form-string "title=Curio writer" --form-string "message=wrote: <title>" \
-  https://api.pushover.net/1/messages.json
-```
+it `done` anyway and stop. Do NOT send any Pushover notification — just report
+what you wrote (or skipped) in your final message. The dispatcher alerts on
+failures and a daily rollup is sent separately, so per-blog pings are noise.
