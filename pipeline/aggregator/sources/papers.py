@@ -148,23 +148,29 @@ def _hf_to_queue_item(p: dict) -> QueueItem:
 # Semantic Scholar citation search (importance / velocity)
 # ---------------------------------------------------------------------------
 
-def _s2_get(params: dict, retries: int = 4):
+def _s2_get(params: dict, retries: int = 2):
+    # With a key the first request succeeds, so retries barely matter. Keyless
+    # (the temporary state until SEMANTIC_SCHOLAR_KEY is set) the shared pool
+    # throttles hard on CI's shared IPs — so back off briefly then GIVE UP fast.
+    # A skipped topic is just picked up on the next daily run; better than one
+    # slow topic dragging the whole cron out.
     headers = {"x-api-key": S2_KEY} if S2_KEY else {}
     for attempt in range(retries):
         try:
             r = requests.get(S2_BULK_SEARCH, params=params, headers=headers, timeout=30)
             if r.status_code == 200:
                 return r.json()
-            if r.status_code == 429:  # shared keyless pool throttles; back off
-                wait = 3 * (attempt + 1)
-                log.warning(f"S2 429, sleeping {wait}s")
+            if r.status_code == 429:
+                wait = min(2 * (attempt + 1), 4)
+                log.warning(f"S2 429, sleeping {wait}s (attempt {attempt + 1}/{retries})")
                 time.sleep(wait)
                 continue
             log.warning(f"S2 -> {r.status_code}: {r.text[:150]}")
             return None
         except requests.RequestException as e:
             log.warning(f"S2 fetch error (attempt {attempt + 1}): {e}")
-            time.sleep(2 ** attempt)
+            time.sleep(min(2 ** attempt, 3))
+    log.warning("S2 throttled — skipping this query, will retry next run")
     return None
 
 
