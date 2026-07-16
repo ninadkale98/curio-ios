@@ -71,6 +71,13 @@ final class FeedViewModel {
     var liked: Set<String> = []
     var saved: Set<String> = []
 
+    // Snapshot of `liked` right after hydration. story.likes from the server
+    // already reflects this snapshot (a trigger keeps it live), so likeCount
+    // only needs to add the *delta* since then — adding a flat +1 whenever
+    // `liked` contains the id would double-count a like the server already
+    // baked into story.likes.
+    private var likedAtLoad: Set<String> = []
+
     private let service: NewsService
     private let engagement = EngagementService()
     private let auth: AuthViewModel?
@@ -100,7 +107,10 @@ final class FeedViewModel {
         guard let token = auth?.session?.accessToken else { return }
         async let likedIDs = try? engagement.fetchLiked(accessToken: token)
         async let savedIDs = try? engagement.fetchSaved(accessToken: token)
-        if let likedIDs = await likedIDs { liked = likedIDs }
+        if let likedIDs = await likedIDs {
+            liked = likedIDs
+            likedAtLoad = likedIDs
+        }
         if let savedIDs = await savedIDs { saved = savedIDs }
     }
 
@@ -109,7 +119,10 @@ final class FeedViewModel {
     func isSaved(_ id: String) -> Bool { saved.contains(id) }
 
     func likeCount(for story: Story) -> Int {
-        story.likes + (liked.contains(story.id) ? 1 : 0)
+        let wasLikedAtLoad = likedAtLoad.contains(story.id)
+        let isLikedNow = liked.contains(story.id)
+        let delta = (isLikedNow ? 1 : 0) - (wasLikedAtLoad ? 1 : 0)
+        return story.likes + delta
     }
 
     func toggleLike(_ id: String) {
