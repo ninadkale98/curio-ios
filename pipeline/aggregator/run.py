@@ -118,6 +118,15 @@ def main():
         log.info(f"=== {name} ({'backfill' if args.backfill else 'incremental'}) ===")
         added[name] = run_source(name, args.backfill, args.resume, story_urls)
 
+    # Refresh rank_score so the writer's 'top' strategy sees current signals.
+    try:
+        requests.post(f"{db.SUPABASE_URL}/rest/v1/rpc/refresh_rank_scores",
+                      headers={"apikey": db.SERVICE_ROLE_KEY, "Authorization": f"Bearer {db.SERVICE_ROLE_KEY}",
+                               "Content-Type": "application/json"}, json={}, timeout=180)
+        log.info("rank scores refreshed")
+    except requests.RequestException as e:
+        log.warning(f"rank refresh failed: {e}")
+
     if not args.backfill:  # only notify on the steady-state (cron) runs
         _notify(added)
 

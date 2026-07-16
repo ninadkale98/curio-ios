@@ -50,3 +50,14 @@ elif [ "$age_h" -gt 26 ]; then
   notify "Curio aggregator ⚠️ stale" "No run in ${age_h}h (daily expected) — re-triggering."
   "$GH" workflow run "$WORKFLOW" -R "$REPO" >/dev/null 2>&1 || true
 fi
+
+# --- Writer daily rollup (uses the public anon RPC; no secret needed) ---
+SB="https://mixkzotcnwvkdvlxhobe.supabase.co"
+ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1peGt6b3Rjbnd2a2R2bHhob2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NzI0ODYsImV4cCI6MjA5ODQ0ODQ4Nn0.3ALwtoucsBj976IN02l4bvkHz2Vaog6fVQaPvxHDVOE"
+summary=$(curl -s -X POST "$SB/rest/v1/rpc/written_today_by_source" \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H "Content-Type: application/json" -d '{}' \
+  | "$PY" -c "import sys,json
+d=json.load(sys.stdin) or {}
+t=sum(d.values())
+print(f'{t} today: ' + ', '.join(f'{k} {v}' for k,v in sorted(d.items())) if d else '0 today (writer idle or Mac asleep)')" 2>/dev/null)
+notify "Curio writer — daily" "${summary:-summary unavailable}"

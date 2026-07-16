@@ -130,12 +130,44 @@ full toolkit and are written **close to their ground-truth source** (see
 - **openpilot** / **rcclx** — numbered sections, multiple tables, ordered lists.
 - **physisforcing** — math/pseudocode blocks, dense benchmark tables.
 
-## Content voice — stay close to the ground truth
+## Content voice — grounded but engaging
 
-Do not creative-rewrite. Restructure the source's own wording into this HTML
-toolkit; keep its examples, numbers, and phrasing. Use the source's actual
-headline as `title`. Avoid overusing em-dashes ("—") — periods and commas
-read closer to how the sources themselves are written.
+The reader should *enjoy* this and not get bored — but every fact is real.
+Engagement comes from **structure, framing, picking the most interesting facts,
+and visuals**, never from inventing anything.
+
+**Structure each blog as:**
+1. **Hook lead** — open with the single most interesting thing (a surprising
+   number, a bold claim the source itself makes, the problem it kills). Not
+   "X is a library that…".
+2. **Why it matters** — the stakes / what changes, in plain language.
+3. **How it works** — the real mechanism, using the source's own concrete
+   specifics (numbers, examples, commands, benchmarks).
+4. **Notable details** — the 2-3 genuinely interesting facts, not a feature dump.
+5. **Bottom line** — a `.callout` closing takeaway.
+
+Scannable `<h2>/<h3>` + short paragraphs; a punchy `blocks` teaser that earns
+the swipe; ~500-900 reader words, no padding. **Accuracy is non-negotiable** —
+real numbers/quotes only; if unsure, leave it out. Use the source's actual
+headline as `title`. Don't sprinkle em-dashes as a tic.
+
+### Visuals are required — generate inline SVG
+
+Every blog must carry visuals that make it easier to understand. **Generate
+them as inline `<svg>`** (no image hunting, always renders) — do not rely on
+finding real images.
+- **1-3 inline-SVG `.viz` cards per blog**: a concept diagram, an
+  architecture/data-flow diagram, a comparison bar chart, a before/after, a
+  pipeline. Whatever actually clarifies the piece.
+- Also use `<table>` for comparisons and `<pre><code>` where the source has
+  real code/commands.
+- Match the house palette inside SVG (`--bg #08090B`, `--surface #101216`,
+  `--elevated #1A1D23`, `--text #F4F5F6`, `--accent #6AA0FF`,
+  `--line rgba(255,255,255,.09)`); label each with a `.cap` in mono caps.
+- **Hero (`imageURL`)**: use the best real source image (github social-preview
+  `opengraph.githubassets.com/1/{owner}/{repo}`, HF paper thumbnail, article
+  `og:image`); if there's none, any https image is fine — the app falls back to
+  the `hue` gradient if it fails to load.
 
 ## Dev wiring (how the two payloads reach the app)
 

@@ -7,21 +7,21 @@ rebuild or TestFlight upload is needed for content changes.
 
 ## Content rules — read this first
 
-The single most important rule: **stay close to the ground truth source**.
+The goal: **the reader should enjoy this and not get bored — but every fact is
+real.** Full voice + structure in `CURIO_BLOG_SPEC.md` ("Content voice —
+grounded but engaging"). In short:
 
-- Use the source's own headline as the `title`, verbatim or near-verbatim.
-  Do not invent a punchier/clickbait title.
-- Write the body by **restructuring the source's own wording** into the HTML
-  toolkit below — this is a formatting pass, not a creative rewrite. Keep the
-  source's own examples, numbers, quotes, and phrasing. Condense repetition,
-  drop page chrome (breadcrumbs, nav labels, footers) — don't add analogies,
-  hooks, or framing the source doesn't already have.
-- **Do not overuse em-dashes ("—").** Prefer periods, commas, or colons. If
-  the source itself uses an em-dash in a spot, it's fine to keep it there —
-  the point is to not sprinkle new ones in as a tic.
-- Apply the Curio house design (headings, lists, tables, blockquote, code,
-  `.callout`, custom SVG/canvas visualizations) — design polish is
-  encouraged; content invention is not.
+- **Grounded but engaging.** Shape a compelling read — a hook lead, a clear
+  "why it matters", plain-language explanation, a bottom-line callout — but the
+  engagement comes from *framing and picking the best facts*, never from
+  inventing numbers, quotes, or claims. Accuracy is non-negotiable.
+- Use the source's own headline as the `title` (verbatim/near-verbatim, no
+  clickbait). Keep the source's real examples, numbers, and quotes.
+- **Visuals required:** generate **1-3 inline `<svg>` `.viz` diagrams** per blog
+  (concept/flow/comparison) so it's easy to understand — don't rely on finding
+  images. Plus tables for comparisons and code blocks where the source has code.
+- Don't sprinkle em-dashes ("—") as a tic. Prefer periods, commas, colons.
+- ~500-900 reader words, scannable headings, short paragraphs.
 
 ## The two payloads
 

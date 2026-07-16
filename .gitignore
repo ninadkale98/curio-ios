@@ -41,3 +41,4 @@ pipeline/.env
 pipeline/**/__pycache__/
 pipeline/aggregator/state/
 pipeline/supabase/
+pipeline/writer/.env.writer
