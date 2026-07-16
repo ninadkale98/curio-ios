@@ -34,3 +34,10 @@ fastlane/README.md
 
 # ── Supabase CLI local state ────────────────────────────
 supabase/.temp/
+
+# ── Content pipeline ─────────────────────────────────────
+pipeline/.venv/
+pipeline/.env
+pipeline/**/__pycache__/
+pipeline/aggregator/state/
+pipeline/supabase/
