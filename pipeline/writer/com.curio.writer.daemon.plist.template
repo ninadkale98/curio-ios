@@ -36,7 +36,7 @@
         <string>/Users/ninad</string>
     </dict>
     <key>StartInterval</key>
-    <integer>7200</integer>
+    <integer>1800</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
