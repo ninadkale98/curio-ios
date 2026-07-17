@@ -110,7 +110,8 @@ Fields: `id` (url-safe slug), `category`
 `likes` **0** (never seed a fake like count), `chat_intro`, `blocks`,
 `prompts` ([]), `body_html`,
 `published_at` (`date -u "+%Y-%m-%dT%H:%M:%SZ"`), `source_url` (the item `url`;
-must be https).
+must be https), `content_type` (the claimed item's own `source` field, verbatim
+— `github`/`arxiv`/`rss`/`blog`/`hn` — drives the card's type icon).
 ```
 curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/insert_story" \
   -H "apikey: $SB_ANON" -H "Authorization: Bearer $SB_ANON" \

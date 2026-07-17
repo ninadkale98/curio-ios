@@ -22,6 +22,7 @@
 		AB002700000000000000AAAA /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA002700000000000000AAAA /* AuthService.swift */; };
 		AB002800000000000000AAAA /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA002800000000000000AAAA /* AuthViewModel.swift */; };
 		AB002900000000000000AAAA /* EngagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA002900000000000000AAAA /* EngagementService.swift */; };
+		AB003000000000000000AAAA /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA003000000000000000AAAA /* SafariView.swift */; };
 		AB000900000000000000AAAA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000900000000000000AAAA /* Assets.xcassets */; };
 		AB001000000000000000AAAA /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA001000000000000000AAAA /* Preview Assets.xcassets */; };
 		AB002000000000000000AAAA /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = AA002000000000000000AAAA /* Fonts */; };
@@ -44,6 +45,7 @@
 		AA002700000000000000AAAA /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		AA002800000000000000AAAA /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		AA002900000000000000AAAA /* EngagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngagementService.swift; sourceTree = "<group>"; };
+		AA003000000000000000AAAA /* SafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariView.swift; sourceTree = "<group>"; };
 		AA000900000000000000AAAA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA001000000000000000AAAA /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		AA002000000000000000AAAA /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fonts; sourceTree = "<group>"; };
@@ -82,6 +84,7 @@
 				AA002700000000000000AAAA /* AuthService.swift */,
 				AA002800000000000000AAAA /* AuthViewModel.swift */,
 				AA002900000000000000AAAA /* EngagementService.swift */,
+				AA003000000000000000AAAA /* SafariView.swift */,
 				AA000600000000000000AAAA /* Models.swift */,
 				AA002100000000000000AAAA /* NewsService.swift */,
 				AA002200000000000000AAAA /* ImageCache.swift */,
@@ -192,6 +195,7 @@
 				AB002700000000000000AAAA /* AuthService.swift in Sources */,
 				AB002800000000000000AAAA /* AuthViewModel.swift in Sources */,
 				AB002900000000000000AAAA /* EngagementService.swift in Sources */,
+				AB003000000000000000AAAA /* SafariView.swift in Sources */,
 				AB000600000000000000AAAA /* Models.swift in Sources */,
 				AB002100000000000000AAAA /* NewsService.swift in Sources */,
 				AB002200000000000000AAAA /* ImageCache.swift in Sources */,
@@ -321,7 +325,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = XUNGZGDFQL;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_ASSET_PATHS = "\"Curio/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -352,7 +356,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = XUNGZGDFQL;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_ASSET_PATHS = "\"Curio/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

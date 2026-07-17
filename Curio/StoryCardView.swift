@@ -20,10 +20,11 @@ struct StoryCardView: View {
     @Environment(\.safeTop) private var safeTop
     @Environment(\.safeBottom) private var safeBottom
     @State private var likeBump: CGFloat = 1
-
-    // Constant image height in both states — the cover no longer morphs/resizes
-    // on expand, so the image never re-crops. The whole image is shown (fit).
-    private var coverHeight: CGFloat { 0.40 }
+    // Native pixel size of the loaded cover image, once known — drives the
+    // cover's own height so it's sized to the image's real aspect ratio
+    // instead of a fixed crop. Same value in both collapsed/expanded states,
+    // so the cover never morphs/resizes on expand.
+    @State private var imageSize: CGSize?
 
     var body: some View {
         GeometryReader { geo in
@@ -52,32 +53,47 @@ struct StoryCardView: View {
     }
 
     // MARK: Cover
+    // Sized to the image's own natural aspect ratio — no letterboxing, no
+    // fixed-crop morphing. Starts just below the notch/Dynamic Island (top
+    // padding = safeTop) instead of running under it. Capped for rare tall
+    // (portrait) images: past the cap we crop the bottom only, never the top,
+    // so the subject (usually framed near the top) is never cut.
+    private func coverHeight(width: CGFloat, cardHeight: CGFloat) -> (height: CGFloat, capped: Bool) {
+        let aspect = imageSize.map { $0.width / max($0.height, 1) } ?? (16.0 / 9.0)
+        let natural = width / aspect
+        let cap = cardHeight * 0.58
+        let minH = cardHeight * 0.22
+        let capped = natural > cap
+        return (min(max(natural, minH), cap), capped)
+    }
+
     @ViewBuilder
     private func cover(geo: GeometryProxy) -> some View {
-        let h = geo.size.height * coverHeight
+        let width = geo.size.width
+        let (h, capped) = coverHeight(width: width, cardHeight: geo.size.height)
 
-        ZStack {
-            // Opaque greedy base — forces the cover to fill h even though the
-            // .fit image below is not greedy (otherwise the frame collapses to
-            // the image's fitted height).
+        ZStack(alignment: .top) {
             theme.surface
 
-            // Fit (not fill) so the whole image shows, never cropped from the top.
-            CachedAsyncImage(url: story.imageURL, hue: story.hue, contentMode: .fit)
+            CachedAsyncImage(
+                url: story.imageURL, hue: story.hue,
+                contentMode: capped ? .fill : .fit,
+                imageAlignment: .top,
+                onImageLoaded: { imageSize = $0 }
+            )
 
-            // Status-bar legibility scrim.
-            VStack {
-                LinearGradient(
-                    colors: [.black.opacity(0.5), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: safeTop + 40)
-                Spacer()
-            }
+            // Legibility scrim for the category pill, which sits near the
+            // cover's own top edge (already clear of the notch).
+            LinearGradient(
+                colors: [.black.opacity(0.45), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 56)
             .allowsHitTesting(false)
         }
-        .frame(width: geo.size.width, height: h)
+        .frame(width: width, height: h)
         .clipped()
+        .padding(.top, safeTop)
     }
 
     private var categoryPill: some View {
@@ -163,6 +179,20 @@ struct StoryCardView: View {
         .allowsHitTesting(false)
     }
 
+    // SF Symbol for the story's origin channel — replaces the old 2-letter
+    // monogram, which just abbreviated the source name and told you nothing
+    // about what kind of thing you were about to read.
+    private var typeIcon: String {
+        switch story.contentType {
+        case "github": return "chevron.left.forwardslash.chevron.right"
+        case "arxiv":  return "doc.text"
+        case "rss":    return "antenna.radiowaves.left.and.right"
+        case "hn":     return "flame"
+        case "blog":   return "text.alignleft"
+        default:       return "square.and.pencil"   // hand-written / unknown origin
+        }
+    }
+
     // Standfirst / dek under the meta row.
     private var dek: some View {
         Text(story.summary)
@@ -183,9 +213,9 @@ struct StoryCardView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(theme.elevated)
                     .frame(width: 32, height: 32)
-                Text(story.mono)
-                    .font(CurioFont.body(11.5, weight: .bold))
-                    .foregroundColor(theme.text)
+                Image(systemName: typeIcon)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(theme.icon)
             }
 
             Text(story.source)

@@ -28,13 +28,14 @@ final class ImageLoader: ObservableObject {
     private var task: Task<Void, Never>?
     private var loadedURL: URL?
 
-    func load(_ url: URL?) {
+    func load(_ url: URL?, onLoaded: ((CGSize) -> Void)? = nil) {
         guard let url else { return }
         if loadedURL == url, image != nil { return }
         loadedURL = url
 
         if let cached = ImageMemoryCache.shared.image(for: url) {
             image = cached
+            onLoaded?(cached.size)
             return
         }
 
@@ -46,6 +47,7 @@ final class ImageLoader: ObservableObject {
                 ImageMemoryCache.shared.insert(ui, for: url)
                 guard !Task.isCancelled else { return }
                 self?.image = ui
+                onLoaded?(ui.size)
             } catch {
                 // Silent — the gradient fallback remains visible.
             }
@@ -67,10 +69,17 @@ struct CachedAsyncImage: View {
     /// `.fill` crops to fill the frame (default). `.fit` shows the whole image,
     /// letterboxed against the hue fallback — used for cards so nothing is cut.
     var contentMode: ContentMode = .fill
+    /// Where the image sits within its frame when cropped (`.fill`). `.top`
+    /// keeps the top edge intact and crops only the bottom — used when a
+    /// caller caps a tall image's height instead of letterboxing it.
+    var imageAlignment: Alignment = .center
+    /// Reports the source image's native pixel size once decoded, so a caller
+    /// can size its frame to the image's own aspect ratio instead of guessing.
+    var onImageLoaded: ((CGSize) -> Void)? = nil
     @StateObject private var loader = ImageLoader()
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: imageAlignment) {
             LinearGradient.coverFallback(hue: hue)
 
             if let img = loader.image {
@@ -81,7 +90,7 @@ struct CachedAsyncImage: View {
             }
         }
         .clipped()
-        .onAppear { loader.load(URL(string: url)) }
+        .onAppear { loader.load(URL(string: url), onLoaded: onImageLoaded) }
         .onDisappear { loader.cancel() }
         .animation(.easeOut(duration: 0.4), value: loader.image != nil)
     }

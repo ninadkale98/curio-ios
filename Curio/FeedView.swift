@@ -24,6 +24,8 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
     var onPageSettled: (Int) -> Void = { _ in }
     var onOpenPanChanged: (CGFloat) -> Void = { _ in }   // horizontal translation.x (negative = opening)
     var onOpenPanEnded: (CGFloat, CGFloat) -> Void = { _, _ in }  // translation.x, velocity.x
+    var onSourceSwipe: () -> Void = { }   // completed rightward swipe — "show me the source"
+    private var sourcePanRecognizer: UIPanGestureRecognizer!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -48,6 +50,14 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
         let openPan = UIPanGestureRecognizer(target: self, action: #selector(handleOpenPan(_:)))
         openPan.delegate = self
         scrollView.addGestureRecognizer(openPan)
+
+        // The rightward counterpart — previously totally unused ("reserved").
+        // A completed rightward swipe on the closed reel fires onSourceSwipe
+        // once, instead of driving any reveal animation.
+        let sourcePan = UIPanGestureRecognizer(target: self, action: #selector(handleSourcePan(_:)))
+        sourcePan.delegate = self
+        scrollView.addGestureRecognizer(sourcePan)
+        sourcePanRecognizer = sourcePan
     }
 
     @objc private func handleOpenPan(_ g: UIPanGestureRecognizer) {
@@ -62,11 +72,24 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
         }
     }
 
-    // Only begin for a clearly-horizontal leftward drag → vertical scroll wins
-    // cleanly, no race.
+    @objc private func handleSourcePan(_ g: UIPanGestureRecognizer) {
+        guard g.state == .ended else { return }
+        let tx = g.translation(in: view).x
+        let vx = g.velocity(in: view).x
+        if tx > 90 || vx > 650 {
+            onSourceSwipe()
+        }
+    }
+
+    // Only begin for a clearly-horizontal drag, gated by direction per
+    // recognizer — leftward opens the reader, rightward shows the source —
+    // so vertical scroll always wins cleanly and the two never race.
     func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
         guard let pan = g as? UIPanGestureRecognizer else { return true }
         let v = pan.velocity(in: view)
+        if pan === sourcePanRecognizer {
+            return v.x > 0 && abs(v.x) > abs(v.y) * 1.2
+        }
         return v.x < 0 && abs(v.x) > abs(v.y) * 1.2
     }
 
@@ -170,12 +193,14 @@ private struct VerticalPager: UIViewControllerRepresentable {
     let onPageSettled: (Int) -> Void
     let onOpenPanChanged: (CGFloat) -> Void
     let onOpenPanEnded: (CGFloat, CGFloat) -> Void
+    var onSourceSwipe: () -> Void = { }
 
     func makeUIViewController(context: Context) -> VerticalPagerController {
         let vc = VerticalPagerController()
         vc.onPageSettled = onPageSettled
         vc.onOpenPanChanged = onOpenPanChanged
         vc.onOpenPanEnded = onOpenPanEnded
+        vc.onSourceSwipe = onSourceSwipe
         vc.setPages(pages, key: contentKey)
         vc.setScrollEnabled(scrollEnabled)
         return vc
@@ -185,6 +210,7 @@ private struct VerticalPager: UIViewControllerRepresentable {
         vc.onPageSettled = onPageSettled
         vc.onOpenPanChanged = onOpenPanChanged
         vc.onOpenPanEnded = onOpenPanEnded
+        vc.onSourceSwipe = onSourceSwipe
         vc.setPages(pages, key: contentKey)
         vc.setScrollEnabled(scrollEnabled)
     }
@@ -203,6 +229,7 @@ struct FeedView: View {
     @State private var detailStory: Story?
     @State private var detailProgress: CGFloat = 0    // 0 = reel, 1 = reader open
     @State private var currentPage = 0                // which reel card is showing
+    @State private var sourceURL: URL?                // presents the in-app source browser
     private let theme: Palette = .dark
 
     private let reveal: Animation = .spring(response: 0.36, dampingFraction: 0.86)
@@ -264,6 +291,9 @@ struct FeedView: View {
         .environment(\.theme, theme)
         .preferredColorScheme(.dark)
         .task { await vm.load() }
+        .sheet(item: $sourceURL) { url in
+            SafariView(url: url).ignoresSafeArea()
+        }
     }
 
     // MARK: Reel
@@ -293,9 +323,19 @@ struct FeedView: View {
             contentKey: contentKey,
             onPageSettled: { page in currentPage = page; expandedID = nil },
             onOpenPanChanged: { tx in openPanChanged(tx, dist) },
-            onOpenPanEnded:  { tx, vx in openPanEnded(tx, vx, dist) }
+            onOpenPanEnded:  { tx, vx in openPanEnded(tx, vx, dist) },
+            onSourceSwipe: openSource
         )
         .ignoresSafeArea(edges: .top)
+    }
+
+    // MARK: Open source (swipe-right on the closed reel)
+    private func openSource() {
+        guard detailStory == nil, !stories.isEmpty else { return }
+        let story = stories[min(max(currentPage, 0), stories.count - 1)]
+        guard let raw = story.sourceURL, let url = URL(string: raw) else { return }
+        Haptics.tap()
+        sourceURL = url
     }
 
     // Changes only when a card's own appearance changes — NOT during the detail

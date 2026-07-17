@@ -104,6 +104,11 @@ struct Story: Identifiable, Codable, Hashable {
     // Drives the Today tab filter (Calendar.isDateInToday). Defaults to now
     // for sample/mock data that predates this column.
     var publishedAt: Date = Date()
+    // Which pipeline channel this came from (github/arxiv/rss/blog/hn) — nil
+    // for the original hand-written stories. Drives the card's type icon.
+    var contentType: String? = nil
+    // The original repo/paper/article URL. Nil for hand-written stories.
+    var sourceURL: String? = nil
 
     // Explicit snake_case keys so this same type encodes straight into (and
     // decodes straight out of) the Supabase `stories` table columns — no
@@ -116,6 +121,8 @@ struct Story: Identifiable, Codable, Hashable {
         case chatIntro = "chat_intro"
         case bodyHTML = "body_html"
         case publishedAt = "published_at"
+        case contentType = "content_type"
+        case sourceURL = "source_url"
     }
 
     static func == (lhs: Story, rhs: Story) -> Bool { lhs.id == rhs.id }

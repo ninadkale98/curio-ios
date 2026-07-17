@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit
 
 // MARK: - DetailView (premium HTML reader)
 // The article body is real HTML rendered in a WKWebView with the Curio house
@@ -34,12 +35,23 @@ struct DetailView: View {
                 )
                 .ignoresSafeArea()
 
-                // Reading-progress bar, pinned to the very top.
-                Rectangle()
-                    .fill(theme.accent)
-                    .frame(width: max(0, geo.size.width * readProgress), height: 2.5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .allowsHitTesting(false)
+                // Reading-progress bar, flush at the very bottom edge — the same
+                // boundary where the tab bar begins — so it reads as one
+                // continuous element (like YouTube's scrubber sitting right at
+                // the edge of the video, not floating above the controls). A
+                // dim track shows the full length, with an accent fill on top.
+                VStack {
+                    Spacer()
+                    ZStack(alignment: .leading) {
+                        Rectangle()
+                            .fill(theme.line)
+                            .frame(height: 2.5)
+                        Rectangle()
+                            .fill(theme.accent)
+                            .frame(width: max(0, geo.size.width * readProgress), height: 2.5)
+                    }
+                }
+                .allowsHitTesting(false)
 
                 // Always-available way back (in addition to swipe-right).
                 Button(action: onClose) {
@@ -54,9 +66,60 @@ struct DetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 16)
                 .padding(.top, safeTop + 4)
+
+                // Jump to the original source's own app, and to ChatGPT with
+                // the piece already loaded as context, so a real conversation
+                // about it is one tap away.
+                actionButtons
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 16)
+                    .padding(.top, safeTop + 4)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
+    }
+
+    // MARK: Action buttons (GitHub / ChatGPT)
+    private var actionButtons: some View {
+        HStack(spacing: 10) {
+            if story.contentType == "github", let raw = story.sourceURL, let url = URL(string: raw) {
+                actionButton(systemName: "chevron.left.forwardslash.chevron.right") {
+                    UIApplication.shared.open(url)
+                }
+            }
+            if let chatURL = chatGPTURL {
+                actionButton(systemName: "bubble.left.and.bubble.right") {
+                    UIApplication.shared.open(chatURL)
+                }
+            }
+        }
+    }
+
+    private func actionButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14.5, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.16), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Best-effort prefill: chatgpt.com's `?q=` opens straight into a new
+    // ChatGPT conversation with this text already in the composer.
+    private var chatGPTURL: URL? {
+        let parts = [story.title, story.sourceURL, story.summary].compactMap { $0 }.filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return nil }
+        let prompt = "Let's discuss this in detail:\n\n" + parts.joined(separator: "\n")
+        // .urlQueryAllowed still lets reserved query characters (&, =, +, #, ?)
+        // through unescaped — strip those too so stray "&"/"#" in a title or
+        // summary can't corrupt the query string.
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=?#/")
+        guard let encoded = prompt.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        return URL(string: "https://chatgpt.com/?q=\(encoded)")
     }
 }
 
@@ -197,13 +260,14 @@ enum ReaderHTML {
     // MARK: House stylesheet — dark, Curio fonts, premium reading defaults.
     private static func css(safeBottom: CGFloat) -> String {
         """
-        @font-face { font-family:'Schibsted'; src:url('SchibstedGrotesk-ExtraBold.ttf'); font-weight:800; font-display:swap; }
-        @font-face { font-family:'Schibsted'; src:url('SchibstedGrotesk-Bold.ttf');      font-weight:700; font-display:swap; }
-        @font-face { font-family:'Schibsted'; src:url('SchibstedGrotesk-SemiBold.ttf');  font-weight:600; font-display:swap; }
-        @font-face { font-family:'Hanken'; src:url('HankenGrotesk-Regular.ttf');  font-weight:400; font-display:swap; }
-        @font-face { font-family:'Hanken'; src:url('HankenGrotesk-Medium.ttf');   font-weight:500; font-display:swap; }
-        @font-face { font-family:'Hanken'; src:url('HankenGrotesk-SemiBold.ttf'); font-weight:600; font-display:swap; }
-        @font-face { font-family:'Hanken'; src:url('HankenGrotesk-Bold.ttf');     font-weight:700; font-display:swap; }
+        @font-face { font-family:'Schibsted'; src:url('Fonts/SchibstedGrotesk-Regular.ttf');  font-weight:400; font-display:swap; }
+        @font-face { font-family:'Schibsted'; src:url('Fonts/SchibstedGrotesk-ExtraBold.ttf'); font-weight:800; font-display:swap; }
+        @font-face { font-family:'Schibsted'; src:url('Fonts/SchibstedGrotesk-Bold.ttf');      font-weight:700; font-display:swap; }
+        @font-face { font-family:'Schibsted'; src:url('Fonts/SchibstedGrotesk-SemiBold.ttf');  font-weight:600; font-display:swap; }
+        @font-face { font-family:'Hanken'; src:url('Fonts/HankenGrotesk-Regular.ttf');  font-weight:400; font-display:swap; }
+        @font-face { font-family:'Hanken'; src:url('Fonts/HankenGrotesk-Medium.ttf');   font-weight:500; font-display:swap; }
+        @font-face { font-family:'Hanken'; src:url('Fonts/HankenGrotesk-SemiBold.ttf'); font-weight:600; font-display:swap; }
+        @font-face { font-family:'Hanken'; src:url('Fonts/HankenGrotesk-Bold.ttf');     font-weight:700; font-display:swap; }
 
         :root {
           --bg:#08090B; --surface:#101216; --elevated:#1A1D23;
@@ -220,8 +284,12 @@ enum ReaderHTML {
                -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
         img { max-width:100%; }
 
-        .hero { position:relative; width:100%; height:42vh; background:var(--elevated); overflow:hidden; }
-        .hero img { width:100%; height:100%; object-fit:cover; display:block; }
+        /* No fixed height / object-fit:cover — the hero renders at the image's
+           own natural aspect ratio (full width, no letterbox, no crop). Only
+           a rare very-tall image gets clipped, and only from the bottom
+           (overflow:hidden + auto-height img keeps the top intact). */
+        .hero { position:relative; width:100%; max-height:58vh; overflow:hidden; background:var(--elevated); }
+        .hero img { width:100%; height:auto; display:block; }
         .hero::after { content:''; position:absolute; inset:0; pointer-events:none;
           background:linear-gradient(to bottom, rgba(8,9,11,.42) 0, rgba(8,9,11,0) 20%,
                      rgba(8,9,11,0) 52%, var(--bg) 100%); }
@@ -229,8 +297,8 @@ enum ReaderHTML {
         .masthead { padding:22px 22px 0; }
         .eyebrow { font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.18em;
           color:var(--accent); text-transform:uppercase; }
-        h1.title { font-family:var(--display); font-weight:800; font-size:26px; line-height:1.16;
-          letter-spacing:-.02em; margin-top:12px; }
+        h1.title { font-family:var(--display); font-weight:400; font-size:26px; line-height:1.2;
+          letter-spacing:-.01em; margin-top:12px; }
         .byline { display:flex; align-items:center; gap:11px; margin-top:18px; }
         .byline .chip { width:36px; height:36px; border-radius:9px; background:var(--elevated);
           display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12.5px; }
