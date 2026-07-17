@@ -148,8 +148,22 @@ and visuals**, never from inventing anything.
 
 Scannable `<h2>/<h3>` + short paragraphs; a punchy `blocks` teaser that earns
 the swipe; ~500-900 reader words, no padding. **Accuracy is non-negotiable** —
-real numbers/quotes only; if unsure, leave it out. Use the source's actual
-headline as `title`. Don't sprinkle em-dashes as a tic.
+real numbers/quotes only; if unsure, leave it out.
+
+**Reader**: a developer/engineer, reading in an idle moment — wants to be
+entertained *and* learn something real, not lectured at. Assume general
+engineering baseline, but zero prior knowledge of this specific tool/paper —
+explain it from scratch every time.
+
+**Title and headings**: short and plain, no em-dash, no colon-split subtitle —
+e.g. `DuckDB Runs SQL Without a Server`, not `DuckDB — An In-Process SQL
+Database Built for Analytics, Not Servers`. No em-dashes anywhere in the piece
+(title, headings, or body prose) — use periods, commas, colons instead.
+
+**Depth without density**: go genuinely deep on the real mechanism, but never
+let it read dense. Simple English, short sentences, one idea per sentence.
+Layer it: plain explanation first, then the deeper mechanism built on top, so
+a reader who's tired can still follow without re-reading a paragraph.
 
 ### Visuals are required — generate inline SVG
 

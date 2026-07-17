@@ -11,7 +11,7 @@ One blog per tick. Across a day's ticks it shapes the feed:
      (velocity / random / recency).
 
 Claiming happens HERE via the atomic RPC, so the source/strategy are exact and
-claude only does the creative writing. Stale claims (a crashed writer) are reset
+the writer only does the creative writing. Stale claims (a crashed writer) are reset
 to pending at the top of each tick.
 """
 import json

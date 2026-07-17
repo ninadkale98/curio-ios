@@ -42,3 +42,4 @@ pipeline/**/__pycache__/
 pipeline/aggregator/state/
 pipeline/supabase/
 pipeline/writer/.env.writer
+pipeline/ops/install_launch_daemons.sh

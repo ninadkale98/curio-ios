@@ -25,18 +25,33 @@ Read `../../CURIO_BLOG_SPEC.md` and `../../ADD_BLOG_TO_SUPABASE.md` (from this
 `pipeline/writer/` dir) for the full house format and voice. The hard voice
 rules, which override any older wording in those files:
 
-- **Title**: the source's real headline, Title-Cased, with a `" — "` dash
-  separator, e.g. `DeepSeek-R1 — Incentivizing Reasoning in LLMs via RL`.
+- **Who's reading this**: someone technical (this is a platform for
+  developers/engineers) reading in an idle, bored moment — they want something
+  genuinely interesting, and to learn something real, without it feeling like
+  work. Assume real engineering baseline (they know what an API, a database, a
+  neural net is), but assume ZERO prior knowledge of THIS specific thing — this
+  exact tool, paper, or repo. Explain it from scratch every time, never assume
+  the reader already recognizes it.
+- **Title**: short and plain. A few words, no subtitle, no `" — "` dash split,
+  no colon-separated clause. It should read like something a person would
+  actually say, not a spec sheet. E.g. `DuckDB Runs SQL Without a Server`, not
+  `DuckDB — An In-Process SQL Database Built for Analytics, Not Servers`.
+- **Section headings** (`<h2>/<h3>`) are also short and plain — a few words,
+  no em-dashes in any heading anywhere in the piece.
 - **Card `blocks`**: a plain, first-principles HOOK. Say clearly WHAT the thing
   is and does, like you are explaining it to a smart friend. Example good lead:
   "Ollama lets you run an AI model on your own computer. Pick any open model,
   type one command." Not flowery, not vague.
-- **Almost no em-dashes** ("—") in the body prose. Use periods, commas, colons.
-  The only allowed em-dash is the one in the title separator.
-- **Go deep, do not repeat.** Explain the real mechanism from first principles:
-  the actual algorithm, the loss/math, the architecture, the numbers. Follow
-  the links in the source and understand them yourself. A superficial re-say is
-  a failure. Easy to read, but genuinely in depth. ~500-1000 words.
+- **No em-dashes** ("—") anywhere — not the title, not headings, not body
+  prose. Use periods, commas, colons instead.
+- **Go deep, but never let it feel dense.** Explain the real mechanism from
+  first principles: the actual algorithm, the loss/math, the architecture, the
+  numbers. Follow the links in the source and understand them yourself. A
+  superficial re-say is a failure. But depth is not the same as density —
+  simple English, short sentences, one idea at a time. Build up: plain
+  explanation first, then the deeper mechanism, layered in so a tired brain
+  can still follow it without re-reading a paragraph. If a sentence needs a
+  second read to parse, rewrite it simpler. ~500-1000 words.
 - **Real images first.** Pull the relevant real figures/images out of the
   source (paper figures, README diagrams) and embed them. Generate inline SVG
   diagrams or tables IN ADDITION when they aid understanding. Every image must
