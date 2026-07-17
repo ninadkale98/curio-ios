@@ -32,8 +32,8 @@
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/curio-watchdog.log</string>
+    <string>/Users/ninad/Library/Logs/curio-watchdog.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/curio-watchdog.log</string>
+    <string>/Users/ninad/Library/Logs/curio-watchdog.log</string>
 </dict>
 </plist>

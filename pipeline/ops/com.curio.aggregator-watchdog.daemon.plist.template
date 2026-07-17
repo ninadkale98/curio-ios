@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- LaunchDAEMON (system domain), not a LaunchAgent — the permanent fix for
+     launchd silently deferring GUI-domain agents as "pended...speculative"
+     when the session isn't a normal physical console login (observed on this
+     box, driven via screen sharing). A system daemon runs whenever the
+     machine is powered on, independent of any login/GUI session state.
+     `gh`'s auth is a plain file (~/.config/gh/hosts.yml), not the keychain,
+     so running as a daemon under UserName doesn't break auth.
+
+     Install (needs sudo — root owns /Library/LaunchDaemons). Fill in the two
+     REPLACE_ME Pushover values first, then:
+       sudo cp com.curio.aggregator-watchdog.daemon.plist.template /Library/LaunchDaemons/com.curio.aggregator-watchdog.plist
+       sudo chown root:wheel /Library/LaunchDaemons/com.curio.aggregator-watchdog.plist
+       sudo chmod 644 /Library/LaunchDaemons/com.curio.aggregator-watchdog.plist
+       sudo launchctl bootstrap system /Library/LaunchDaemons/com.curio.aggregator-watchdog.plist
+
+     Then remove the old GUI LaunchAgent so both don't run:
+       launchctl bootout gui/$(id -u)/com.curio.aggregator-watchdog 2>/dev/null
+       rm -f ~/Library/LaunchAgents/com.curio.aggregator-watchdog.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.curio.aggregator-watchdog</string>
+    <key>UserName</key>
+    <string>ninad</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/ninad/experiment/Curio_ios/Curio/pipeline/ops/watchdog.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/ninad</string>
+        <key>PUSHOVER_TOKEN</key>
+        <string>REPLACE_ME</string>
+        <key>PUSHOVER_USER</key>
+        <string>REPLACE_ME</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/ninad/Library/Logs/curio-watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ninad/Library/Logs/curio-watchdog.log</string>
+</dict>
+</plist>
