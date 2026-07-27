@@ -31,7 +31,12 @@ rules, which override any older wording in those files:
   work. Assume real engineering baseline (they know what an API, a database, a
   neural net is), but assume ZERO prior knowledge of THIS specific thing — this
   exact tool, paper, or repo. Explain it from scratch every time, never assume
-  the reader already recognizes it.
+  the reader already recognizes it. **This applies to BOTH payloads** — the
+  card `blocks` teaser AND the full `body_html` article. If you use an acronym
+  or a piece of jargon specific to this source, define it in plain words the
+  moment it first appears, in each payload separately (a reader may only ever
+  see the card, or open straight into the article, so neither can assume the
+  other already explained it).
 - **Title**: short and plain. A few words, no subtitle, no `" — "` dash split,
   no colon-separated clause. It should read like something a person would
   actually say, not a spec sheet. E.g. `DuckDB Runs SQL Without a Server`, not

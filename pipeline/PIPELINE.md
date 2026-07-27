@@ -25,10 +25,14 @@ Pushover creds — re-run to reinstall or pick up a config change).
 
 Per tick, `dispatch.py`:
 1. Resets stale claims (a crashed writer's `claimed` rows >20min old → `pending`).
-2. Spawns up to **5 `codex exec` writers in parallel**: **3** for today's fresh
-   items (`created_at >= today`), **2** draining the two least-written backlog
+2. Spawns up to **7 `codex exec` writers in parallel**: **3** for today's fresh
+   items (`created_at >= today`), **4** draining the least-written backlog
    modalities (mixed velocity/random/recency strategy). Fresh uncapped; backlog
-   capped `DAILY_BACKLOG_CAP`/day.
+   capped `DAILY_BACKLOG_CAP`/day — tracked as backlog-only completions
+   (`created_at < today`), so a high-volume fresh day can't starve the backlog
+   to zero (a real bug this cap used to have: it counted fresh+backlog
+   combined, so once fresh alone crossed the cap, backlog got zero slots for
+   the rest of the day). Target: ~100 blogs/day across both.
 3. Claims each item deterministically (atomic `claim_next_item` RPC — the
    dispatcher claims, not the writer, so source/strategy are exact), writes the
    item JSON to a temp file, hands it off.
