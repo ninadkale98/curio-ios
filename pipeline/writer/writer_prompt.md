@@ -57,6 +57,23 @@ rules, which override any older wording in those files:
   explanation first, then the deeper mechanism, layered in so a tired brain
   can still follow it without re-reading a paragraph. If a sentence needs a
   second read to parse, rewrite it simpler. ~500-1000 words.
+- **Explain every core mechanism like you're explaining it to a smart
+  five-year-old, then go deeper from there.** Before you use a technical term,
+  ground it in a concrete, everyday analogy or example, not just an abstract
+  definition. Bad: "DuckDB uses vectorized execution, processing data in
+  batches instead of row by row." Good: "Imagine stapling 2,000 pages in one
+  motion instead of picking up the stapler 2,000 separate times, same total
+  work, way less wasted motion. That's what DuckDB does with your data: it
+  grabs a batch of rows and processes the whole batch in one motion instead of
+  one row at a time." The analogy is a teaching tool for a REAL mechanism, not
+  an invented fact, never distort what actually happens to make the analogy
+  fit. Do this for every major mechanism in the piece, not just the intro.
+- **Never repeat a point you already made, reworded.** This is the single
+  biggest thing that makes a blog feel boring: saying the same thing twice in
+  different words to pad length. Before you write a sentence, check whether
+  you already said this. If yes, cut it or push forward to a genuinely new
+  detail instead. Every sentence must add information the reader didn't
+  already have.
 - **Real images first.** Pull the relevant real figures/images out of the
   source (paper figures, README diagrams) and embed them. Generate inline SVG
   diagrams or tables IN ADDITION when they aid understanding. Every image must

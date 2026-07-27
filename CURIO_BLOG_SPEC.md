@@ -160,6 +160,15 @@ e.g. `DuckDB Runs SQL Without a Server`, not `DuckDB — An In-Process SQL
 Database Built for Analytics, Not Servers`. No em-dashes anywhere in the piece
 (title, headings, or body prose) — use periods, commas, colons instead.
 
+**Explain it like you're talking to a smart five-year-old, then go deeper.**
+Ground every core mechanism in a concrete, everyday analogy before the
+technical term. Not "vectorized execution processes data in batches" but
+something like "picture stapling 2,000 pages in one motion instead of one at
+a time, that's what the engine does with rows of data." The analogy explains
+a real mechanism, it never distorts one to fit. And never repeat a point
+already made in different words just to pad length, that's the single
+biggest thing that makes a piece read as boring.
+
 **Depth without density**: go genuinely deep on the real mechanism, but never
 let it read dense. Simple English, short sentences, one idea per sentence.
 Layer it: plain explanation first, then the deeper mechanism built on top, so
