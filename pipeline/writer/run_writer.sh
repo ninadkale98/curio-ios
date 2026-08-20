@@ -1,5 +1,5 @@
 #!/bin/bash
-# Curio writer — one blog per invocation, via headless Codex CLI.
+# Curio writer — one blog per invocation, via headless Claude Code.
 # Usage: ./run_writer.sh [backlog|fresh]   (default: backlog)
 # Secrets come from .env.writer (gitignored, local only).
 set -uo pipefail
@@ -18,4 +18,11 @@ PROMPT="$(cat writer_prompt.md)
 BEGIN NOW. This is your task, not a document to review. Read \$CLAIM_FILE and
 carry out every step: fetch the source, write the blog, and publish it via the
 RPCs end to end. Do not ask questions or merely summarize what to do."
-codex exec --dangerously-bypass-approvals-and-sandbox "$PROMPT"
+# stream-json + verbose so the dispatcher can parse the real rate_limit_event
+# lines out of stdout (ground truth for the account's 5-hour/7-day usage
+# window) instead of guessing from arbitrary error text.
+claude -p "$PROMPT" \
+  --model sonnet \
+  --output-format stream-json \
+  --verbose \
+  --dangerously-skip-permissions

@@ -42,4 +42,5 @@ pipeline/**/__pycache__/
 pipeline/aggregator/state/
 pipeline/supabase/
 pipeline/writer/.env.writer
+pipeline/writer/.rate_limit_state.json
 pipeline/ops/install_launch_daemons.sh

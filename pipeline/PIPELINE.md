@@ -8,8 +8,9 @@ A two-wing system that keeps Curio's feed growing without manual authoring.
 - **Writer wing** (`writer/`, LIVE): drains `content_queue` by signal, does the
   editorial write (a real Curio blog per `../CURIO_BLOG_SPEC.md`, with real
   source images re-hosted + generated SVG), inserts into `stories`, marks the
-  row `done`. LLM-in-the-loop via headless `codex exec`. Runs LOCALLY as a
-  system LaunchDaemon (see "Scheduling" below).
+  row `done`. LLM-in-the-loop via headless `claude -p` (Claude Code, billed
+  against the account's Claude Pro subscription — see "Engine & rate limits"
+  below). Runs LOCALLY as a system LaunchDaemon (see "Scheduling" below).
 
 The two wings are independent so their cadences tune separately.
 
@@ -23,38 +24,68 @@ normal physical console login; a system daemon runs independent of any
 login/GUI session. See `ops/install_launch_daemons.sh` (gitignored, embeds
 Pushover creds — re-run to reinstall or pick up a config change).
 
+### Engine & rate limits (`claude -p`, not pay-per-token)
+
+The writer engine was Codex for a stretch, but switched back to Claude Code —
+Codex's account/quota was no longer available, and more importantly Claude's
+subscription plan makes a genuinely dynamic scheduler possible (see below),
+which a flat per-token API bill wouldn't need. Two things follow from running
+against a Claude Pro subscription (a rolling 5-hour, and separately 7-day,
+usage window — not pay-per-token):
+
+1. **Dynamic slot count, time-of-day based** (`current_slot_plan()` in
+   `dispatch.py`): the user works with Claude interactively at night and
+   wants the writer to stay out of the way then, but push hard the rest of
+   the time so the window's capacity doesn't just reset unused.
+   `QUIET_START_HOUR`-`QUIET_END_HOUR` (local time, currently 8pm-midnight)
+   runs a reserved/light slot count (1 fresh, 0 backlog); outside that window
+   runs boosted (3 fresh, 8 backlog).
+2. **Reactive circuit breaker** (`is_blocked()` / `parse_writer_output()`):
+   each writer runs with `--output-format stream-json` so the dispatcher can
+   read the real `rate_limit_event` Anthropic sends back
+   (`status`/`resetsAt`/`rateLimitType`), not guess from error text. On an
+   actual block (`status: "rejected"`), every future tick is skipped —
+   logged once, no writers spawned — until the real reset time, tracked in
+   `.rate_limit_state.json` (gitignored, local). This matters because the
+   previous engine (Codex) had no such breaker: once its usage limit was hit,
+   every 30-min tick kept retrying and failing for **days** until the quota's
+   own rolling window happened to recover, burning cycles for nothing the
+   whole time. A softer `status: "allowed_warning"` (approaching the limit,
+   not yet blocked) throttles backlog slots down for one hour rather than
+   stopping outright.
+
 Per tick, `dispatch.py`:
-1. Resets stale claims (a crashed writer's `claimed` rows >20min old → `pending`).
-2. Spawns up to **7 `codex exec` writers in parallel**: **3** for today's fresh
-   items (`created_at >= today`), **4** draining the least-written backlog
-   modalities (mixed velocity/random/recency strategy). Fresh uncapped; backlog
-   capped `DAILY_BACKLOG_CAP`/day — tracked as backlog-only completions
-   (`created_at < today`), so a high-volume fresh day can't starve the backlog
-   to zero (a real bug this cap used to have: it counted fresh+backlog
-   combined, so once fresh alone crossed the cap, backlog got zero slots for
-   the rest of the day). Target: ~100 blogs/day across both.
-3. Claims each item deterministically (atomic `claim_next_item` RPC — the
+1. Checks the circuit breaker (`is_blocked()`) — if still rate-limited, skips
+   the entire tick with one log line, no writers spawned.
+2. Resets stale claims (a crashed writer's `claimed` rows >20min old → `pending`).
+3. Computes this tick's slot counts dynamically (`current_slot_plan()`, see
+   above) and spawns that many `claude -p` writers in parallel: fresh items
+   (`created_at >= today`) first, then backlog draining the least-written
+   modalities (mixed velocity/random/recency strategy). Fresh uncapped;
+   backlog capped `DAILY_BACKLOG_CAP`/day — tracked as backlog-only
+   completions (`created_at < today`), so a high-volume fresh day can't
+   starve the backlog to zero (a real bug this cap used to have: it counted
+   fresh+backlog combined, so once fresh alone crossed the cap, backlog got
+   zero slots for the rest of the day).
+4. Claims each item deterministically (atomic `claim_next_item` RPC — the
    dispatcher claims, not the writer, so source/strategy are exact), writes the
    item JSON to a temp file, hands it off.
 
-Each writer (`run_writer.sh` → headless `codex exec
---dangerously-bypass-approvals-and-sandbox`, prompt = `writer_prompt.md` + a
-"BEGIN NOW" kickoff so the markdown is executed, not just read): makes a
-private `$WORK=$(mktemp -d)` (parallel-safe), reads `$CLAIM_FILE`, fetches the
-source (README / ar5iv figures / article page — Codex reliably goes further
-than Claude did here, e.g. reading a project's actual source tree/docs for
-real implementation details, not just the README), quality-gates (skip
-star-farms/stubs), re-hosts real images to Supabase Storage bucket
-`blog-assets`, writes both payloads (`blocks` + `body_html`) per the voice
-rules — short plain titles (no em-dash/subtitle split), no em-dashes anywhere,
-depth without density (simple English, one idea at a time, built up in
-layers) — inserts via `insert_story` RPC, marks the queue row `done`. Blogs
-start at `likes = 0`.
-
-Engine choice (Codex over Claude) was decided after a direct side-by-side test
-on the same source (DuckDB): both honored the format rules perfectly, but
-Codex went further on real depth (cited actual source constants/internals,
-not just README-level description), at the cost of running ~2x slower.
+Each writer (`run_writer.sh` → headless `claude -p --model sonnet
+--output-format stream-json --verbose --dangerously-skip-permissions`, prompt
+= `writer_prompt.md` + a "BEGIN NOW" kickoff so the markdown is executed, not
+just read): makes a private `$WORK=$(mktemp -d)` (parallel-safe), reads
+`$CLAIM_FILE`, fetches the source (README / ar5iv figures / article page),
+quality-gates (skip star-farms/stubs), re-hosts real images to Supabase
+Storage bucket `blog-assets`, writes both payloads (`blocks` + `body_html`)
+per the voice rules — short plain titles (no em-dash/subtitle split), no
+em-dashes anywhere, every core mechanism grounded in a concrete everyday
+analogy before the technical term (explain-it-like-I'm-five, then go deeper),
+never repeat a point already made — inserts via `insert_story` RPC, marks the
+queue row `done`. Blogs start at `likes = 0`. `--output-format stream-json` is
+load-bearing, not cosmetic: it's what lets the dispatcher parse real
+`rate_limit_event`/`result` data out of the writer's stdout instead of
+grepping arbitrary text.
 
 DB access is three anon-callable SECURITY DEFINER RPCs (migrations 0007/0008), so
 no service_role is embedded in the writer for DB writes (service_role is used
@@ -63,9 +94,12 @@ only for Storage image uploads): `claim_next_item(mode, source, strategy)`,
 and `refresh_rank_scores()`.
 
 Secrets: `writer/.env.writer` (gitignored). Monitoring: persistent log
-`~/Library/Logs/curio-writer.log`; Pushover only on failures + a daily rollup
-(via `ops/watchdog.sh`) — no per-blog pings. Tuning knobs: `FRESH_SLOTS`,
-`BACKLOG_SLOTS`, `DAILY_BACKLOG_CAP` in `dispatch.py`; `StartInterval` in the plist.
+`~/Library/Logs/curio-writer.log`; Pushover only on genuine failures + a daily
+rollup (via `ops/watchdog.sh`) — a real rate-limit block is expected/handled,
+not a failure, so it's logged but doesn't page. Tuning knobs (all in
+`dispatch.py`): `QUIET_START_HOUR`/`QUIET_END_HOUR`, `QUIET_FRESH_SLOTS`/
+`QUIET_BACKLOG_SLOTS`, `BOOST_FRESH_SLOTS`/`BOOST_BACKLOG_SLOTS`,
+`WARNING_BACKLOG_SLOTS`, `DAILY_BACKLOG_CAP`; `StartInterval` in the plist.
 
 To resume in a fresh session: read `content_pipeline` in memory (auto-loaded) and
 this file. The writer runs unattended once the Mac is on.

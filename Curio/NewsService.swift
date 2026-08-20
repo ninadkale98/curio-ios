@@ -3,12 +3,16 @@ import Observation
 
 // MARK: - News Service (API seam)
 // Swap MockNewsService for a real implementation; the rest of the app is agnostic.
+// Cursor-paginated (keyset, on published_at) instead of "fetch everything" —
+// the story count grows daily forever, so an unbounded fetch was always going
+// to become a problem. `before: nil` = first page (most recent); otherwise
+// strictly older than the cursor.
 protocol NewsService: Sendable {
-    func fetchStories() async throws -> [Story]
+    func fetchStories(before cursor: Date?, limit: Int) async throws -> [Story]
 }
 
 struct MockNewsService: NewsService {
-    func fetchStories() async throws -> [Story] {
+    func fetchStories(before cursor: Date?, limit: Int) async throws -> [Story] {
         // Structured exactly like a network call so the swap is trivial.
         sampleStories
     }
@@ -23,9 +27,18 @@ struct SupabaseNewsService: NewsService {
     private let baseURL = URL(string: "https://mixkzotcnwvkdvlxhobe.supabase.co/rest/v1/stories")!
     private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1peGt6b3Rjbnd2a2R2bHhob2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NzI0ODYsImV4cCI6MjA5ODQ0ODQ4Nn0.3ALwtoucsBj976IN02l4bvkHz2Vaog6fVQaPvxHDVOE"
 
-    func fetchStories() async throws -> [Story] {
+    func fetchStories(before cursor: Date?, limit: Int) async throws -> [Story] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "order", value: "published_at.desc")]
+        var queryItems = [
+            URLQueryItem(name: "order", value: "published_at.desc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let cursor {
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            queryItems.append(URLQueryItem(name: "published_at", value: "lt.\(iso.string(from: cursor))"))
+        }
+        components.queryItems = queryItems
 
         var request = URLRequest(url: components.url!)
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
@@ -63,6 +76,11 @@ final class FeedViewModel {
 
     private(set) var stories: [Story] = []
     private(set) var state: LoadState = .idle
+    private(set) var hasMore = true
+    private(set) var isLoadingMore = false
+
+    private static let initialPageSize = 150
+    private static let pageSize = 100
 
     // Local optimistic state, persisted to Supabase per-user via
     // EngagementService when signed in (see hydrateEngagement/toggleLike/
@@ -94,10 +112,31 @@ final class FeedViewModel {
         }
         state = .loading
         do {
-            stories = try await service.fetchStories()
+            let page = try await service.fetchStories(before: nil, limit: Self.initialPageSize)
+            stories = page
+            hasMore = page.count == Self.initialPageSize
             state = .loaded
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Fetches the next older page and appends it — call when the reel nears
+    /// the end of what's currently loaded (infinite scroll). The story count
+    /// grows every day forever, so this (not a one-shot fetch-everything) is
+    /// what keeps memory bounded regardless of how large the table gets.
+    func loadMore() async {
+        guard hasMore, !isLoadingMore, let cursor = stories.last?.publishedAt else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let page = try await service.fetchStories(before: cursor, limit: Self.pageSize)
+            stories.append(contentsOf: page)
+            hasMore = page.count == Self.pageSize
+        } catch {
+            // Silent — the reel just stops growing for now; the next
+            // near-end trigger retries automatically. A background
+            // pagination fetch failing shouldn't surface a disruptive error.
         }
     }
 

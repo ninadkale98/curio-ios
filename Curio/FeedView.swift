@@ -13,19 +13,36 @@ import UIKit
 //     without clipping the NEXT card's cover bled into the current card.
 //
 // Native pan drives scrolling. Velocity-based snapping + a fixed-duration
-// animation give the crisp TikTok feel. contentKey lets us skip rootView churn
-// when only the (unrelated) detail transition is animating.
+// animation give the crisp TikTok feel.
+//
+// WINDOWED HOSTING — the other crash this once had: a plain UIScrollView
+// holds every subview live all the time (unlike UITableView/UICollectionView,
+// it never recycles). The original version built a UIHostingController for
+// EVERY story up front, so once the feed grew past ~1000 stories, launch
+// meant instantiating 1000+ full SwiftUI view trees at once — each one's
+// CachedAsyncImage firing its network load immediately on appear too. That's
+// what actually crashed the app as the table grew, not the JSON payload size.
+// Fixed by only ever hosting a small window of pages around the current
+// scroll position (±windowRadius) and tearing down/recreating hosts as the
+// user scrolls — contentSize still reflects the full virtual scroll extent
+// (pages.count), so paging math is unaffected; only which pages are actually
+// backed by a live view changes.
 final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     private let scrollView = UIScrollView()
-    private var hosts: [UIHostingController<AnyView>] = []
+    private var pages: [AnyView] = []
+    private var hostedViews: [Int: UIHostingController<AnyView>] = [:]
     private var lastSize: CGSize = .zero
-    private var lastKey = ""
-    private(set) var currentPage = 0
+    private(set) var currentPage = 0          // only updates when a page actually settles
+    private var windowCenter = 0              // follows scroll position continuously, for windowing only
     var onPageSettled: (Int) -> Void = { _ in }
     var onOpenPanChanged: (CGFloat) -> Void = { _ in }   // horizontal translation.x (negative = opening)
     var onOpenPanEnded: (CGFloat, CGFloat) -> Void = { _, _ in }  // translation.x, velocity.x
     var onSourceSwipe: () -> Void = { }   // completed rightward swipe — "show me the source"
+    var onNearEnd: () -> Void = { }       // within nearEndThreshold pages of the end — trigger loadMore()
     private var sourcePanRecognizer: UIPanGestureRecognizer!
+
+    private let windowRadius = 2          // keep current ±2 pages resident (5 hosted at once)
+    private let nearEndThreshold = 8
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -99,32 +116,14 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
         true
     }
 
-    func setPages(_ pages: [AnyView], key: String) {
-        if hosts.count == pages.count {
-            guard key != lastKey else { return }     // nothing card-relevant changed — skip
-            lastKey = key
-            for (h, p) in zip(hosts, pages) { h.rootView = p }
-            return
+    func setPages(_ newPages: [AnyView]) {
+        pages = newPages
+        if currentPage > max(0, pages.count - 1) {
+            currentPage = max(0, pages.count - 1)
+            windowCenter = currentPage
         }
-        hosts.forEach {
-            $0.willMove(toParent: nil)
-            $0.view.removeFromSuperview()
-            $0.removeFromParent()
-        }
-        hosts = pages.map { page in
-            let h = UIHostingController(rootView: page)
-            h.view.backgroundColor = .clear
-            h.overrideUserInterfaceStyle = .dark
-            h.safeAreaRegions = []
-            h.view.clipsToBounds = true              // never let a card draw outside its own page
-            addChild(h)
-            scrollView.addSubview(h.view)
-            h.didMove(toParent: self)
-            return h
-        }
-        lastKey = key
-        lastSize = .zero
         viewIfLoaded?.setNeedsLayout()
+        refreshWindow()   // cheap now — only ever touches ~5 hosted views
     }
 
     func setScrollEnabled(_ enabled: Bool) {
@@ -135,15 +134,66 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
         super.viewDidLayoutSubviews()
         scrollView.frame = view.bounds
         let size = view.bounds.size
-        guard size.width > 0, size.height > 0, size != lastSize else { return }
-        lastSize = size
-        for (i, h) in hosts.enumerated() {
-            h.view.frame = CGRect(x: 0, y: CGFloat(i) * size.height,
-                                  width: size.width, height: size.height)
+        guard size.width > 0, size.height > 0 else { return }
+        if size != lastSize {
+            lastSize = size
+            scrollView.contentSize = CGSize(width: size.width, height: size.height * CGFloat(pages.count))
+            scrollView.contentOffset = CGPoint(x: 0, y: CGFloat(currentPage) * size.height)
+            repositionHostedViews(size: size)
         }
-        scrollView.contentSize = CGSize(width: size.width,
-                                        height: size.height * CGFloat(hosts.count))
-        scrollView.contentOffset = CGPoint(x: 0, y: CGFloat(currentPage) * size.height)
+        refreshWindow()
+    }
+
+    private func repositionHostedViews(size: CGSize) {
+        for (index, host) in hostedViews {
+            host.view.frame = CGRect(x: 0, y: CGFloat(index) * size.height, width: size.width, height: size.height)
+        }
+    }
+
+    // Keeps only pages within ±windowRadius of windowCenter actually backed
+    // by a live UIHostingController — everything else is torn down. This is
+    // what keeps memory/launch cost flat no matter how large the feed grows.
+    private func refreshWindow() {
+        guard !pages.isEmpty, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        let lo = max(0, windowCenter - windowRadius)
+        let hi = min(pages.count - 1, windowCenter + windowRadius)
+        let wanted = Set(lo...hi)
+
+        for index in hostedViews.keys where !wanted.contains(index) {
+            let h = hostedViews.removeValue(forKey: index)
+            h?.willMove(toParent: nil)
+            h?.view.removeFromSuperview()
+            h?.removeFromParent()
+        }
+
+        let size = view.bounds.size
+        for index in wanted {
+            if let existing = hostedViews[index] {
+                existing.rootView = pages[index]
+            } else {
+                let h = UIHostingController(rootView: pages[index])
+                h.view.backgroundColor = .clear
+                h.overrideUserInterfaceStyle = .dark
+                h.safeAreaRegions = []
+                h.view.clipsToBounds = true       // never let a card draw outside its own page
+                h.view.frame = CGRect(x: 0, y: CGFloat(index) * size.height, width: size.width, height: size.height)
+                addChild(h)
+                scrollView.addSubview(h.view)
+                h.didMove(toParent: self)
+                hostedViews[index] = h
+            }
+        }
+    }
+
+    func scrollViewDidScroll(_ sv: UIScrollView) {
+        let h = view.bounds.height
+        guard h > 0, !pages.isEmpty else { return }
+        let approx = Int((sv.contentOffset.y / h).rounded())
+        let clamped = max(0, min(pages.count - 1, approx))
+        if clamped != windowCenter {
+            windowCenter = clamped
+            refreshWindow()
+        }
     }
 
     // MARK: velocity-based paging + crisp snap (no slow deceleration tail)
@@ -161,7 +211,7 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
         } else {
             target = Int((targetContentOffset.pointee.y / h).rounded())
         }
-        target = max(0, min(hosts.count - 1, target))
+        target = max(0, min(pages.count - 1, target))
 
         targetContentOffset.pointee = sv.contentOffset
         let dest = CGPoint(x: 0, y: CGFloat(target) * h)
@@ -176,12 +226,18 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
     func scrollViewDidEndDecelerating(_ sv: UIScrollView) {
         let h = view.bounds.height
         guard h > 0 else { return }
-        settlePage(max(0, min(hosts.count - 1, Int((sv.contentOffset.y + h / 2) / h))))
+        settlePage(max(0, min(pages.count - 1, Int((sv.contentOffset.y + h / 2) / h))))
     }
     private func settlePage(_ page: Int) {
-        guard page != currentPage else { return }
-        currentPage = page
-        onPageSettled(page)
+        windowCenter = page
+        refreshWindow()
+        if page != currentPage {
+            currentPage = page
+            onPageSettled(page)
+        }
+        if pages.count - 1 - page <= nearEndThreshold {
+            onNearEnd()
+        }
     }
 }
 
@@ -189,11 +245,11 @@ final class VerticalPagerController: UIViewController, UIScrollViewDelegate, UIG
 private struct VerticalPager: UIViewControllerRepresentable {
     let pages: [AnyView]
     let scrollEnabled: Bool
-    let contentKey: String
     let onPageSettled: (Int) -> Void
     let onOpenPanChanged: (CGFloat) -> Void
     let onOpenPanEnded: (CGFloat, CGFloat) -> Void
     var onSourceSwipe: () -> Void = { }
+    var onNearEnd: () -> Void = { }
 
     func makeUIViewController(context: Context) -> VerticalPagerController {
         let vc = VerticalPagerController()
@@ -201,7 +257,8 @@ private struct VerticalPager: UIViewControllerRepresentable {
         vc.onOpenPanChanged = onOpenPanChanged
         vc.onOpenPanEnded = onOpenPanEnded
         vc.onSourceSwipe = onSourceSwipe
-        vc.setPages(pages, key: contentKey)
+        vc.onNearEnd = onNearEnd
+        vc.setPages(pages)
         vc.setScrollEnabled(scrollEnabled)
         return vc
     }
@@ -211,7 +268,8 @@ private struct VerticalPager: UIViewControllerRepresentable {
         vc.onOpenPanChanged = onOpenPanChanged
         vc.onOpenPanEnded = onOpenPanEnded
         vc.onSourceSwipe = onSourceSwipe
-        vc.setPages(pages, key: contentKey)
+        vc.onNearEnd = onNearEnd
+        vc.setPages(pages)
         vc.setScrollEnabled(scrollEnabled)
     }
 }
@@ -320,11 +378,11 @@ struct FeedView: View {
                 )
             },
             scrollEnabled: expandedID == nil && detailStory == nil,
-            contentKey: contentKey,
             onPageSettled: { page in currentPage = page; expandedID = nil },
             onOpenPanChanged: { tx in openPanChanged(tx, dist) },
             onOpenPanEnded:  { tx, vx in openPanEnded(tx, vx, dist) },
-            onSourceSwipe: openSource
+            onSourceSwipe: openSource,
+            onNearEnd: { Task { await vm.loadMore() } }
         )
         .ignoresSafeArea(edges: .top)
     }
@@ -336,15 +394,6 @@ struct FeedView: View {
         guard let raw = story.sourceURL, let url = URL(string: raw) else { return }
         Haptics.tap()
         sourceURL = url
-    }
-
-    // Changes only when a card's own appearance changes — NOT during the detail
-    // transition — so the pager skips rebuilding its hosted cards every frame.
-    private var contentKey: String {
-        let parts = stories.map { s in
-            "\(s.id):\(vm.isLiked(s.id) ? 1 : 0)\(vm.isSaved(s.id) ? 1 : 0):\(vm.likeCount(for: s))"
-        }
-        return (expandedID ?? "-") + "|" + parts.joined(separator: ",")
     }
 
     // MARK: Open (swipe-left) — interactive, driven by the pager's UIKit pan
